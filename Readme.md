@@ -3,8 +3,8 @@
 A Hero's Redemption 2D is a simple RPG battle game built using the LÖVE 12 Beta game Framework.
 It serves as a personal proof-of-concept and learning exercise to better understand the mechanics, systems, and potential complexities involved in game development, specifically in preparation for a larger Unity 3D group project for later this year. This 2D project aims to provide insights into code volume, game architecture, and overall development effort. Ultimately, it helps assess the feasibility of achieving our ambitious 3D game goals within a few months of part-time development.
 
-## ScreenShot
-![ScreenShot1](https://github.com/dundd2/WIP-A-Heros-Redemption-2D/blob/main/assets/Screenshot/SC(1).png)
+## ScreenShot (V0.01)
+![ScreenShot1](https://github.com/dundd2/A-Heros-Redemption-2D/blob/main/assets/Screenshot/SC(1).gif)
 
 ## Project Overview
 
@@ -36,7 +36,7 @@ This 2D demo is intentionally simplified and **does not include** features plann
 - **Play Status UI**:Current HP, MP, EXP, LV.  MC’s statistics, 
 - **Quest Page** : Show players’ mission
 
-Despite these simplifications, the 2D game codebase already consists of approximately **3000 lines of code**. This provides a tangible reference point for understanding the scale and complexity even of a reduced-scope game and highlights potential challenges in developing a more feature-rich 3D project within our timeframe.
+Despite these simplifications, the 2D game codebase already consists of approximately **3500+ lines of code**. This provides a tangible reference point for understanding the scale and complexity even of a reduced-scope game and highlights potential challenges in developing a more feature-rich 3D project within our timeframe.
 
 For more detailed features and information about our current (Jan 2025) plans for the 3D project, please check the [A Hero's Redemption Game Plan](A%20Hero's%20Redemption%20Game%20Plan.pdf)
  file.
@@ -47,6 +47,12 @@ For more detailed features and information about our current (Jan 2025) plans fo
 
 ## How to Play
 
+### Option 1: Download the Executable (Windows)
+1. Go to the [Releases](https://github.com/dundd2/A-Heros-Redemption-2D/releases) page
+2. Download the latest .exe file
+3. Run the downloaded executable to play the game
+
+### Option 2: Run with LÖVE
 1.  **Download Love:** Download and install LÖVE from [https://love2d.org/](https://love2d.org/).
 2.  **Download or Clone the Project:** Clone or download this repository to your local machine.
 3.  **Run the Game:** Drag and drop the project folder (the folder containing `main.lua`) onto the `love.exe` executable (on Windows) or run from the terminal.
