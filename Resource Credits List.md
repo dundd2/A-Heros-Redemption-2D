@@ -54,4 +54,5 @@ All sound effects are used under appropriate licenses and have been sourced from
 - **Usage**: chinese-font.ttf
 - **Designer**: Adobe
 - **Source**: https://fonts.google.com/noto/specimen/Noto+Sans+TC
+https://fonts.google.com/share?selection.family=Noto+Sans+HK:wght@100..900
 - **License**: SIL Open Font License 1.1
