@@ -6,7 +6,7 @@ local GameLogic
 local GameData 
 
 local player, enemy, resources, animations, battleState, uiState, pauseState,
-      resultState, menuState, optionsState, storyPageState, aboutPageState,
+      resultState, menuState, optionsState, storyPageState, aboutPageState, howToPlayState,
       inventoryState, questLogState, statsScreenState,
       GAME_CONSTANTS, playerSettings, audioState,
       screenWidth, screenHeight, availableResolutions, currentResolutionIndex,
@@ -17,7 +17,7 @@ local M = {}
 
 function M.setGlobals(
     p, e, r, a, bs, us, ps,
-    rs, ms, os, sps, aps,
+    rs, ms, os, sps, aps, htps,
     is, qls, sss,
     gc, ps_settings, as_audio,
     sw, sh, ar, cri,
@@ -36,6 +36,7 @@ function M.setGlobals(
     optionsState = os
     storyPageState = sps
     aboutPageState = aps
+    howToPlayState = htps
     inventoryState = is
     questLogState = qls
     statsScreenState = sss
@@ -1240,7 +1241,7 @@ function M.drawInventoryScreen(inventoryState, player, GameData, currentGameLang
 
     love.graphics.setFont(titleFont)
     love.graphics.setColor(1, 1, 1)
-    love.graphics.printf("Inventory", 0, 20, windowWidth, "center")
+    love.graphics.printf(GameData.getText(currentGameLanguage, "inventory_screen_title"), 0, 20, windowWidth, "center")
 
     love.graphics.setFont(itemFont)
     for i = 1, player.inventoryCapacity do
@@ -1289,7 +1290,26 @@ function M.drawInventoryScreen(inventoryState, player, GameData, currentGameLang
             if itemData.type == "consumable" then
                 love.graphics.setFont(itemFont)
                 love.graphics.setColor(0.7, 1, 0.7)
-                love.graphics.printf("Press Enter to Use", inventoryState.detailsX, inventoryState.detailsY + 80, windowWidth - inventoryState.detailsX - 20, "left")
+                love.graphics.printf(GameData.getText(currentGameLanguage, "inventory_prompt_details_use"), inventoryState.detailsX, inventoryState.detailsY + 80, windowWidth - inventoryState.detailsX - 20, "left")
+            elseif itemData.type == "equipment" then
+                love.graphics.setFont(itemFont)
+                love.graphics.setColor(0.7, 0.9, 1) -- Light blue for equip/unequip
+                -- Check if the item is currently equipped to decide which prompt to show.
+                -- This logic might need adjustment based on how equipped status is tracked.
+                -- For now, assuming a simple check. If player.equipment[slotKey] == selectedItem.itemId (this check is complex here)
+                -- A simpler way is to check if this item is in an equipment slot.
+                local isEquipped = false
+                for _, equipSlotKey in ipairs(inventoryState.equipmentSlotOrder) do
+                    if player.equipment[equipSlotKey] == selectedItem.itemId then
+                        isEquipped = true
+                        break
+                    end
+                end
+                if isEquipped then
+                    love.graphics.printf(GameData.getText(currentGameLanguage, "inventory_prompt_details_unequip"), inventoryState.detailsX, inventoryState.detailsY + 80, windowWidth - inventoryState.detailsX - 20, "left")
+                else
+                    love.graphics.printf(GameData.getText(currentGameLanguage, "inventory_prompt_details_equip"), inventoryState.detailsX, inventoryState.detailsY + 80, windowWidth - inventoryState.detailsX - 20, "left")
+                end
             end
         end
     end
@@ -1656,13 +1676,12 @@ function M.drawCharacters(animations, resources, positions, enemy)
     end
   end
 
-  -- Ensure playerImage is not nil before trying to get its dimensions
   if not playerImage then
     print("[ERROR] playerImage is nil in M.drawCharacters. Defaulting to playerStand.")
     playerImage = resources.images.playerStand
     if not playerImage then
         print("[ERROR] Default playerStand image is also nil. Cannot draw player.")
-        return -- Or handle error appropriately
+        return 
     end
   end
 
@@ -1694,10 +1713,10 @@ function M.drawCharacters(animations, resources, positions, enemy)
 
   if not currentEnemySprite then
       print("[ERROR] Enemy sprite is nil in drawCharacters. Fallback.")
-      currentEnemySprite = resources.images.enemyDemonKing -- Fallback image
+      currentEnemySprite = resources.images.enemyDemonKing 
       if not currentEnemySprite then
           print("[ERROR] Default enemyDemonKing image is also nil. Cannot draw enemy.")
-          return -- Or handle error appropriately
+          return 
       end
   end
 
@@ -1711,8 +1730,97 @@ function M.drawCharacters(animations, resources, positions, enemy)
   end
 
   local enemyDrawX = positions.enemy.x - (enemyImage:getWidth() * enemyScale) / 2
-  local enemyDrawY = positions.enemy.y - (enemyImage:getHeight() * enemyScale) / 2
+  local enemyDrawY = positions.y - (enemyImage:getHeight() * enemyScale) / 2
   love.graphics.draw(enemyImage, enemyDrawX, enemyDrawY, 0, enemyScale, enemyScale)
+end
+
+function M.drawHowToPlayPageUI(resources, howToPlayState, gameData, currentLanguage)
+    love.graphics.setColor(0.1, 0.1, 0.2, 1) -- Dark blue background
+    love.graphics.rectangle("fill", 0, 0, screenWidth, screenHeight)
+    love.graphics.setColor(1, 1, 1, 1) -- Reset color to white for text
+
+    local uiFont = resources.fonts.ui
+    local lineSpacing = uiFont:getHeight() * 1.5
+    if currentLanguage == "zh" then
+        uiFont = resources.fonts.chineseUI or resources.fonts.ui -- Fallback if chineseUI is not defined
+        lineSpacing = (resources.fonts.chineseUI and resources.fonts.chineseUI:getHeight() or uiFont:getHeight()) * 1.5
+    end
+    love.graphics.setFont(uiFont)
+
+    -- Title
+    local titleText = gameData.getText(currentLanguage, "how_to_play_title")
+    love.graphics.printf(titleText, 0, 50, screenWidth, "center")
+
+    -- Instructional Text
+    local yPos = 120
+    local xPos = 50
+    local indentX = xPos + 150 -- Indent for keys/actions
+    local sectionSpacing = lineSpacing * 1.2 -- Spacing between sections
+    local valueIndentX = xPos + 250 -- Indent for the actual keys
+
+    -- Controls Section Title
+    love.graphics.setColor(0.8, 1, 0.8) -- Light green for section titles
+    love.graphics.print(gameData.getText(currentLanguage, "htp_title_controls"), xPos, yPos)
+    love.graphics.setColor(1, 1, 1)
+    yPos = yPos + sectionSpacing
+
+    -- Movement
+    love.graphics.print(gameData.getText(currentLanguage, "htp_movement"), xPos, yPos)
+    love.graphics.print(gameData.getText(currentLanguage, "htp_movement_keys"), valueIndentX, yPos)
+    yPos = yPos + lineSpacing
+
+    -- Interact/Confirm
+    love.graphics.print(gameData.getText(currentLanguage, "htp_interact"), xPos, yPos)
+    love.graphics.print(gameData.getText(currentLanguage, "htp_interact_keys"), valueIndentX, yPos)
+    yPos = yPos + lineSpacing
+
+    -- Cancel/Back
+    love.graphics.print(gameData.getText(currentLanguage, "htp_cancel_back"), xPos, yPos)
+    love.graphics.print(gameData.getText(currentLanguage, "htp_cancel_back_keys"), valueIndentX, yPos)
+    yPos = yPos + sectionSpacing -- Add more space after general controls
+
+    -- Inventory Hotkey
+    love.graphics.print(gameData.getText(currentLanguage, "htp_menu_inventory"), xPos, yPos)
+    love.graphics.print(gameData.getText(currentLanguage, "htp_menu_inventory_key"), valueIndentX, yPos)
+    yPos = yPos + lineSpacing
+
+    -- Quest Log Hotkey
+    love.graphics.print(gameData.getText(currentLanguage, "htp_menu_quests"), xPos, yPos)
+    love.graphics.print(gameData.getText(currentLanguage, "htp_menu_quests_key"), valueIndentX, yPos)
+    yPos = yPos + lineSpacing
+
+    -- Stats Screen Hotkey
+    love.graphics.print(gameData.getText(currentLanguage, "htp_menu_stats"), xPos, yPos)
+    love.graphics.print(gameData.getText(currentLanguage, "htp_menu_stats_key"), valueIndentX, yPos)
+    yPos = yPos + sectionSpacing -- Add more space after menu hotkeys
+
+    -- Battle Actions
+    love.graphics.print(gameData.getText(currentLanguage, "htp_battle_actions"), xPos, yPos)
+    love.graphics.printf(gameData.getText(currentLanguage, "htp_battle_actions_keys"), valueIndentX, yPos, screenWidth - valueIndentX - xPos, "left")
+    yPos = yPos + uiFont:getHeight(gameData.getText(currentLanguage, "htp_battle_actions_keys"), screenWidth - valueIndentX - xPos) + lineSpacing
+
+
+    -- Skip Dialogue
+    love.graphics.print(gameData.getText(currentLanguage, "htp_skip_dialogue"), xPos, yPos)
+    love.graphics.print(gameData.getText(currentLanguage, "htp_skip_dialogue_key"), valueIndentX, yPos)
+    yPos = yPos + sectionSpacing
+
+    -- Back Button
+    local backButtonText = gameData.getText(currentLanguage, "how_to_play_back_button")
+    local buttonWidth = uiFont:getWidth(backButtonText) + 40 -- Padding
+    local buttonHeight = uiFont:getHeight() + 20 -- Padding
+    local buttonX = (screenWidth - buttonWidth) / 2
+    local buttonY = screenHeight - buttonHeight - 30
+
+    -- Define button area for mouse clicks
+    howToPlayState.backButtonArea = {x = buttonX, y = buttonY, width = buttonWidth, height = buttonHeight}
+
+    -- Draw button (simple rectangle and text)
+    love.graphics.setColor(0.3, 0.3, 0.3, 1)
+    love.graphics.rectangle("fill", buttonX, buttonY, buttonWidth, buttonHeight)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.printf(backButtonText, buttonX, buttonY + (buttonHeight - uiFont:getHeight()) / 2, buttonWidth, "center")
+    love.graphics.setColor(1,1,1) -- Reset color just in case
 end
 
 return M

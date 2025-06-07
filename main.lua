@@ -27,6 +27,7 @@ aboutPageState = {}
 inventoryState = {}
 questLogState = {}
 statsScreenState = {}
+howToPlayState = {}
 
 -- Global Constants (can be accessed directly)
 GAME_CONSTANTS = {
@@ -195,6 +196,11 @@ function love.load()
       {textKey = "menu_options", action = function() GameHelpers.transitionGameState(gameState, "options") end, descriptionKey = "menu_options_desc"},
       {textKey = "menu_story_page", action = function() GameHelpers.transitionGameState(gameState, "storyPage") end, descriptionKey = "menu_story_page_desc"},
       {textKey = "menu_about", action = function() GameHelpers.transitionGameState(gameState, "aboutPage") end, descriptionKey = "menu_about_desc"},
+      {
+          textKey = "menu_how_to_play",
+          action = function() GameHelpers.transitionGameState(gameState, "howToPlay") end,
+          descriptionKey = "menu_how_to_play_desc"
+      },
       {textKey = "menu_quest_log", action = function() GameHelpers.transitionGameState(gameState, "questLogScreen") end, descriptionKey = "menu_quest_log_desc"},
       {textKey = "menu_statistics", action = function() GameHelpers.transitionGameState(gameState, "statsScreen") end, descriptionKey = "menu_statistics_desc"},
       {textKey = "menu_save_game", action = function() GameHelpers.saveGame() end, descriptionKey = "menu_save_game_desc"},
@@ -261,7 +267,7 @@ function love.load()
   -- This must happen AFTER all global tables are initialized.
   GameLogic.setGlobals(
       player, enemy, resources, animations, battleState, uiState, pauseState,
-      resultState, menuState, optionsState, storyPageState, aboutPageState,
+      resultState, menuState, optionsState, storyPageState, aboutPageState, howToPlayState,
       inventoryState, questLogState, statsScreenState,
       GAME_CONSTANTS, playerSettings, audioState,
       screenWidth, screenHeight, availableResolutions, currentResolutionIndex,
@@ -269,7 +275,7 @@ function love.load()
   )
   GameHelpers.setGlobals(
       player, enemy, resources, animations, battleState, uiState, pauseState,
-      resultState, menuState, optionsState, storyPageState, aboutPageState,
+      resultState, menuState, optionsState, storyPageState, aboutPageState, howToPlayState,
       inventoryState, questLogState, statsScreenState,
       GAME_CONSTANTS, playerSettings, audioState,
       screenWidth, screenHeight, availableResolutions, currentResolutionIndex,
@@ -365,6 +371,9 @@ function love.update(dt)
         GameLogic.handleQuestLogInput(dt, questLogState, player, GameData, currentGameLanguage)
     elseif gameState == "statsScreen" then
         -- No continuous update needed for stats screen
+    elseif gameState == "howToPlay" then
+        -- No continuous updates needed for this page yet
+        -- GameLogic.handleHowToPlayInput(dt, howToPlayState) -- If scrolling or other updates were needed
     end
 end
 
@@ -415,6 +424,8 @@ function love.draw()
     GameHelpers.drawQuestLogScreen(questLogState, player, GameData, currentGameLanguage, resources)
   elseif gameState == "statsScreen" then
     GameHelpers.drawStatsScreen(statsScreenState, player, GameData, currentGameLanguage, resources)
+  elseif gameState == "howToPlay" then
+    GameHelpers.drawHowToPlayPageUI(resources, howToPlayState, GameData, currentGameLanguage)
   end
   love.graphics.pop()
 end
@@ -637,6 +648,12 @@ function love.keypressed(key)
             else
                 GameHelpers.transitionGameState(gameState, "menu")
             end
+        end
+    elseif gameState == "howToPlay" then
+        if key == "escape" then
+            GameHelpers.transitionGameState(gameState, "menu")
+            -- Optionally, reset scroll position if any: howToPlayState.scrollPosition = 0
+            print("[GAME STATE] Game state changed to 'menu' from howToPlay")
         end
     end
 
@@ -1045,6 +1062,13 @@ function love.mousepressed(x, y, button, istouch, presses)
                     break
                 end
             end
+        end
+    elseif gameState == "howToPlay" then
+        if howToPlayState.backButtonArea and GameLogic.isPointInRect(x, y, howToPlayState.backButtonArea) then
+            GameHelpers.transitionGameState(gameState, "menu")
+            -- Optionally, reset scroll position if any: howToPlayState.scrollPosition = 0
+            print("[HOW TO PLAY] Back button clicked, returning to main menu")
+            handled = true
         end
     end
 
