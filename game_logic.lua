@@ -225,7 +225,8 @@ end
 M.VALID_GAME_STATES = {
     menu = true, battle = true, story = true, pause = true, victory = true, defeat = true,
     options = true, storyPage = true, levelSelect = true, aboutPage = true,
-    inventoryScreen = true, questLogScreen = true, statsScreen = true, ending = true
+    inventoryScreen = true, questLogScreen = true, statsScreen = true, ending = true,
+    howToPlay = true
 }
 
 M.VALID_BATTLE_PHASES = {
