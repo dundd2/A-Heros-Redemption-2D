@@ -787,7 +787,10 @@ battleState = {
   },
   currentOption = 1,
   buttonAreas = {},
-  effects = {}
+  effects = {},
+  victoryTriggered = false,
+  defeatTriggered = false,
+  leaveGrindingButtonArea = nil -- Will be defined in drawBattleUI if in grinding mode
 }
 print("[GAME] Battle state initialized")
   uiState = {
@@ -909,11 +912,13 @@ print("[GAME] Battle state initialized")
     buttonAreas = {},
     levelSelect = {
         currentLevel = 1,
-        maxLevel = 10,
+        maxLevel = 10, -- Max regular levels
         navTimer = 0,
         navDelay = 0.6,
         buttonAreas = {},
-        backButtonArea = {}
+        backButtonArea = {},
+        grindingLevelIds = {}, -- To be populated with keys from GameData.grindingLevels
+        selectedGrindingLevelKey = nil -- Stores the key if a grinding level is selected
     }
   }
   print("[GAME] Menu state initialized")
@@ -1004,6 +1009,15 @@ print("[GAME] Battle state initialized")
   end
   loadingState = false
   transitionGameState(nil, "menu")
+
+  -- Temporary population for testing -  (This should ideally be done more dynamically)
+  if GameData and GameData.grindingLevels then
+      for id, _ in pairs(GameData.grindingLevels) do
+          table.insert(menuState.levelSelect.grindingLevelIds, id)
+      end
+      -- Sort them if necessary for consistent order
+      table.sort(menuState.levelSelect.grindingLevelIds)
+  end
 end
 TimerSystem = {
     timers = {},
@@ -1136,19 +1150,48 @@ function love.update(dt)
             battleState.messageTimer = battleState.messageTimer - dt
         end
         if enemy.hp <= 0 then
-            local currentEnemyData = enemyData[menuState.levelSelect.currentLevel]
-            if currentEnemyData and currentEnemyData.expReward then
-                grantExp(currentEnemyData.expReward)
+            if not battleState.victoryTriggered then -- Add a flag to prevent multiple triggers
+                grantExp(enemy.expReward or 0) -- Use enemy.expReward, ensure it's populated in restartGame
+                battleState.victoryTriggered = true -- Set flag
+
+                if currentState.isGrinding then
+                    -- Continuous spawning for grinding mode
+                    battleState.message = GameData.getText(currentGameLanguage, "grinding_next_opponent", nil, "Next opponent incoming!") -- Placeholder, add to game_data
+                    battleState.messageTimer = GAME_CONSTANTS.TIMER.ACTION_DELAY
+
+                    TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY + 0.5, function()
+                        if gameState == "battle" and currentState.isGrinding then -- Ensure still in grinding battle
+                            battleState.victoryTriggered = false -- Reset for next enemy
+                            restartGame()
+                            -- Player HP/MP are reset in restartGame() via player settings if desired, or keep current
+                            print("[GRINDING] Spawning next enemy.")
+                        end
+                    end, TIMER_GROUPS.BATTLE)
+                else
+                    -- Regular victory
+                    battleState.phase = "result" -- Keep this for regular mode
+                    TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY + (battleState.messageTimer > 0 and battleState.messageTimer or 0), function()
+                        if gameState == "battle" then -- Check if still in battle before transitioning
+                             transitionGameState(gameState, "victory")
+                        end
+                    end, TIMER_GROUPS.BATTLE)
+                end
             end
-            battleState.phase = "result"
-            TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY + (battleState.messageTimer > 0 and battleState.messageTimer or 0), function()
-                transitionGameState(gameState, "victory")
-            end, TIMER_GROUPS.BATTLE)
         elseif player.hp <= 0 then
-            battleState.phase = "result"
-            TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY + (battleState.messageTimer > 0 and battleState.messageTimer or 0), function()
-                transitionGameState(gameState, "defeat")
-            end, TIMER_GROUPS.BATTLE)
+            if not battleState.defeatTriggered then -- Add a flag
+                battleState.defeatTriggered = true
+                battleState.phase = "result"
+                TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY + (battleState.messageTimer > 0 and battleState.messageTimer or 0), function()
+                    if gameState == "battle" then -- Check if still in battle
+                        if currentState.isGrinding then
+                            -- Optional: Handle defeat in grinding differently? For now, same as regular.
+                            -- Player can leave from defeat screen or restart (which would restart grinding if isGrinding is still true)
+                            -- currentState.isGrinding = false; -- Or keep it true if defeat screen has grinding-aware options
+                        end
+                        transitionGameState(gameState, "defeat")
+                    end
+                end, TIMER_GROUPS.BATTLE)
+            end
         end
     elseif gameState == "pause" then
     elseif gameState == "ending" then
@@ -1771,9 +1814,36 @@ function drawLevelSelect()
           love.graphics.setColor(1, 1, 1)
       end
       local text = GameData.getText(currentGameLanguage, "level_number", {level = i})
-      local textWidth = fontUI:getWidth(text)
-      love.graphics.print(text, buttonRect.x, buttonRect.y)
+      -- local textWidth = fontUI:getWidth(text) -- Not needed if width is fixed
+      love.graphics.print(text, buttonRect.x + 10, buttonRect.y + 5) -- Add some padding
   end
+
+  local totalRegularLevels = menuState.levelSelect.maxLevel
+  local grindingLevelBaseIndex = totalRegularLevels + 1
+
+  for i, grindingId in ipairs(menuState.levelSelect.grindingLevelIds) do
+      local levelY = 150 + (totalRegularLevels + i - 1) * 40 -- Continue Y position
+      local grindingLevelData = GameData.grindingLevels[grindingId]
+      local text = GameData.getText(currentGameLanguage, grindingLevelData.name_key, nil, grindingId)
+
+      local buttonRect = {
+          x = windowWidth / 2 - (fontUI:getWidth(text) / 2) - 10, -- Centered text with padding
+          y = levelY,
+          width = fontUI:getWidth(text) + 20, -- Dynamic width with padding
+          height = 30
+      }
+      menuState.levelSelect.buttonAreas[grindingLevelBaseIndex + i - 1] = buttonRect
+
+      if menuState.levelSelect.currentLevel == (grindingLevelBaseIndex + i - 1) then -- Check if this grinding level is selected
+          love.graphics.setColor(1, 1, 0) -- Highlight color
+          love.graphics.rectangle("line", buttonRect.x, buttonRect.y, buttonRect.width, buttonRect.height)
+          -- menuState.levelSelect.selectedGrindingLevelKey = grindingId -- This should be set on input, not draw
+      else
+          love.graphics.setColor(1, 1, 1)
+      }
+      love.graphics.print(text, buttonRect.x + 10, buttonRect.y + 5)
+  end
+
   local backButtonRect = {
     x = 10,
     y = 10,
@@ -2042,10 +2112,27 @@ function drawCharacters()
   local playerDrawY = positions.player.y - (playerImage:getHeight() * playerScale) / 2
   love.graphics.draw(playerImage, playerDrawX, playerDrawY, 0, playerScale, playerScale)
 
-  local currentEnemyData = enemyData[menuState.levelSelect.currentLevel]
-  local enemyImageKey = animations.enemy.current == "attack" and (currentEnemyData.attackImage or currentEnemyData.image) or currentEnemyData.image
-  local enemyImage = resources.images[enemyImageKey] or resources.images.enemyDemonKing
+  -- Use stored keys in enemy object, which are populated by restartGame
+  local enemyStandImageKey = enemy.image -- This is already the image object from resources.images
+  local enemyAttackImageActualKey = enemy.attackImageKey -- This is the string key
 
+  local currentEnemySprite
+  if animations.enemy.current == "attack" then
+    if enemyAttackImageActualKey and resources.images[enemyAttackImageActualKey] then
+      currentEnemySprite = resources.images[enemyAttackImageActualKey]
+    else
+      currentEnemySprite = enemyStandImage -- Fallback to stand image if attack image is missing
+    end
+  else
+    currentEnemySprite = enemyStandImage
+  end
+
+  if not currentEnemySprite then
+      print("[ERROR] Enemy sprite is nil in drawCharacters. Fallback.")
+      currentEnemySprite = resources.images.enemyDemonKing -- Absolute fallback
+  end
+
+  local enemyImage = currentEnemySprite
   local enemyScaleX = positions.enemy.maxWidth / enemyImage:getWidth()
   local enemyScaleY = positions.enemy.maxHeight / enemyImage:getHeight()
   local enemyScale = math.min(enemyScaleX, enemyScaleY)
@@ -2130,8 +2217,8 @@ function drawBattleUI()
   local enemyHpText = string.format("HP: %d / %d", math.floor(enemy.hp), math.floor(enemy.maxHp))
   local enemyHpTextWidth = fontUI:getWidth(enemyHpText)
   love.graphics.print(enemyHpText, enemyHpX + hpBarWidth / 2 - enemyHpTextWidth / 2, enemyHpY + hpBarHeight + 5)
-  local currentEnemyData = enemyData[menuState.levelSelect.currentLevel]
-  local enemyName = GameData.getText(currentGameLanguage, currentEnemyData.displayNameKey)
+  -- Use stored displayNameKey from enemy object
+  local enemyName = GameData.getText(currentGameLanguage, enemy.displayNameKey, nil, "Unknown Enemy")
   local enemyNameWidth = fontUI:getWidth(enemyName)
   love.graphics.print(enemyName, enemyHpX + hpBarWidth / 2 - enemyNameWidth / 2, enemyHpY - fontUI:getHeight() - 5)
 
@@ -2215,6 +2302,29 @@ function drawBattleUI()
         love.graphics.setColor(1, 0.5, 0.5)
       end
     end
+  end
+
+  -- Draw "Leave Training" button if in grinding mode
+  if currentState.isGrinding then
+      local buttonWidth = 150
+      local buttonHeight = 40
+      local buttonX = windowWidth - buttonWidth - 20 -- Position it e.g., top-right or bottom-right
+      local buttonY = windowHeight * 0.1 -- Example: near top-right below enemy HP
+
+      battleState.leaveGrindingButtonArea = {x = buttonX, y = buttonY, width = buttonWidth, height = buttonHeight}
+
+      love.graphics.setFont(fontUI) -- Ensure uiFont (fontUI) is active
+      local text = GameData.getText(currentGameLanguage, "battle_action_leave_grinding", nil, "Leave Training") -- Key to be added
+      local textWidth = fontUI:getWidth(text)
+
+      -- Simple button drawing
+      love.graphics.setColor(0.7, 0.2, 0.2, 0.8) -- Reddish button
+      love.graphics.rectangle("fill", buttonX, buttonY, buttonWidth, buttonHeight)
+      love.graphics.setColor(1,1,1)
+      love.graphics.rectangle("line", buttonX, buttonY, buttonWidth, buttonHeight)
+      love.graphics.printf(text, buttonX + (buttonWidth - textWidth)/2, buttonY + (buttonHeight - fontUI:getHeight())/2, buttonWidth, "center")
+  else
+      battleState.leaveGrindingButtonArea = nil -- Ensure it's nil when not grinding
   end
 end
 function drawEffects()
@@ -2397,19 +2507,27 @@ function handleLevelSelectInput(dt)
   local moved = false
   local prevLevel = menuState.levelSelect.currentLevel
   menuState.levelSelect.navTimer = menuState.levelSelect.navTimer + dt
+  local totalOptions = menuState.levelSelect.maxLevel + #menuState.levelSelect.grindingLevelIds
+
   if  menuState.levelSelect.navTimer >  menuState.levelSelect.navDelay then
     if love.keyboard.isDown("up") or love.keyboard.isDown("w") then
       menuState.levelSelect.currentLevel = math.max(1, menuState.levelSelect.currentLevel - 1)
       moved = true
       menuState.levelSelect.navTimer = 0
     elseif love.keyboard.isDown("down") or love.keyboard.isDown("s") then
-      menuState.levelSelect.currentLevel = math.min(menuState.levelSelect.maxLevel, menuState.levelSelect.currentLevel + 1)
+      menuState.levelSelect.currentLevel = math.min(totalOptions, menuState.levelSelect.currentLevel + 1)
       moved = true
       menuState.levelSelect.navTimer = 0
     end
   end
   if moved and menuState.levelSelect.currentLevel ~= prevLevel then
-    print("[LEVEL SELECT] Level selected: " .. menuState.levelSelect.currentLevel)
+    if menuState.levelSelect.currentLevel > menuState.levelSelect.maxLevel then
+        local grindingIndex = menuState.levelSelect.currentLevel - menuState.levelSelect.maxLevel
+        menuState.levelSelect.selectedGrindingLevelKey = menuState.levelSelect.grindingLevelIds[grindingIndex]
+    else
+        menuState.levelSelect.selectedGrindingLevelKey = nil
+    end
+    print("[LEVEL SELECT] Level selected: " .. menuState.levelSelect.currentLevel .. " Grinding Key: " .. tostring(menuState.levelSelect.selectedGrindingLevelKey))
   end
 end
 local storyEnterTimer = 0
@@ -2594,18 +2712,51 @@ function love.keypressed(key)
       option.action()
     end
   elseif gameState == "levelSelect" then
+    local totalOptions = menuState.levelSelect.maxLevel + #menuState.levelSelect.grindingLevelIds
     if key == "return" then
-        print("[LEVEL SELECT] Level " .. menuState.levelSelect.currentLevel .. " selected")
-        GameData.startLevelDialogue(menuState.levelSelect.currentLevel)
-        transitionGameState(gameState, "story")
+        local selectedIdx = menuState.levelSelect.currentLevel
+        if selectedIdx >= 1 and selectedIdx <= menuState.levelSelect.maxLevel then
+            -- Regular level selected
+            currentState.isGrinding = false -- Ensure this is reset
+            GameData.startLevelDialogue(selectedIdx)
+            transitionGameState(gameState, "story")
+            print("[LEVEL SELECT] Regular Level " .. selectedIdx .. " selected")
+        elseif selectedIdx > menuState.levelSelect.maxLevel and selectedIdx <= totalOptions then
+            -- Grinding level selected
+            local grindingIndex = selectedIdx - menuState.levelSelect.maxLevel
+            local grindingId = menuState.levelSelect.grindingLevelIds[grindingIndex]
+            if grindingId then
+                currentState.isGrinding = true
+                currentState.currentGrindingLevelId = grindingId
+                menuState.levelSelect.selectedGrindingLevelKey = grindingId -- Ensure this is set
+                print("[LEVEL SELECT] Grinding Level " .. grindingId .. " selected. isGrinding: " .. tostring(currentState.isGrinding))
+                -- No dialogue for grinding, directly to battle
+                restartGame()
+                transitionGameState(gameState, "battle")
+            else
+                print("[LEVEL SELECT] Error: Could not find grindingId for index: " .. grindingIndex)
+            end
+        else
+            print("[LEVEL SELECT] Error: selectedIdx out of bounds: " .. selectedIdx)
+        end
     elseif key == "escape" then
       transitionGameState(gameState, "menu")
     elseif key == "up" or key == "w" then
       menuState.levelSelect.currentLevel = math.max(1, menuState.levelSelect.currentLevel - 1)
-      print("[LEVEL SELECT] Level selected: " .. menuState.levelSelect.currentLevel)
+      if menuState.levelSelect.currentLevel > menuState.levelSelect.maxLevel and menuState.levelSelect.currentLevel <= totalOptions then
+           menuState.levelSelect.selectedGrindingLevelKey = menuState.levelSelect.grindingLevelIds[menuState.levelSelect.currentLevel - menuState.levelSelect.maxLevel]
+      else
+           menuState.levelSelect.selectedGrindingLevelKey = nil
+      end
+      print("[LEVEL SELECT] Level selected: " .. menuState.levelSelect.currentLevel .. " Grinding Key: " .. tostring(menuState.levelSelect.selectedGrindingLevelKey))
     elseif key == "down" or key == "s" then
-      menuState.levelSelect.currentLevel = math.min(menuState.levelSelect.maxLevel, menuState.levelSelect.currentLevel + 1)
-      print("[LEVEL SELECT] Level selected: " .. menuState.levelSelect.currentLevel)
+      menuState.levelSelect.currentLevel = math.min(totalOptions, menuState.levelSelect.currentLevel + 1)
+      if menuState.levelSelect.currentLevel > menuState.levelSelect.maxLevel and menuState.levelSelect.currentLevel <= totalOptions then
+           menuState.levelSelect.selectedGrindingLevelKey = menuState.levelSelect.grindingLevelIds[menuState.levelSelect.currentLevel - menuState.levelSelect.maxLevel]
+      else
+           menuState.levelSelect.selectedGrindingLevelKey = nil
+      end
+      print("[LEVEL SELECT] Level selected: " .. menuState.levelSelect.currentLevel .. " Grinding Key: " .. tostring(menuState.levelSelect.selectedGrindingLevelKey))
     end
   elseif gameState == "story" then
     if key == "return" then
@@ -2643,7 +2794,9 @@ function love.keypressed(key)
         end
       end
     elseif key == "escape" then
-        handleBattlePause() 
+        handleBattlePause()
+    elseif key == "x" and currentState.isGrinding then -- New hotkey 'x' for exiting grind
+        exitGrindingMode()
     end
   elseif gameState == "pause" then 
       if key == "up" or key == "w" then
@@ -2854,13 +3007,33 @@ function love.mousepressed(x, y, button, istouch, presses)
             end
         end
     elseif gameState == "levelSelect" then
+        local totalOptions = menuState.levelSelect.maxLevel + #menuState.levelSelect.grindingLevelIds
         if menuState.levelSelect.buttonAreas then
-            for i, buttonRect in ipairs(menuState.levelSelect.buttonAreas) do
-                if isPointInRect(x, y, buttonRect) then
-                    menuState.levelSelect.currentLevel = i
-                    print("[LEVEL SELECT] Level " .. menuState.levelSelect.currentLevel .. " selected by mouse")
-                    GameData.startLevelDialogue(menuState.levelSelect.currentLevel)
-                    transitionGameState(gameState, "story")
+            for i = 1, totalOptions do -- Iterate through all possible buttons
+                local buttonRect = menuState.levelSelect.buttonAreas[i]
+                if buttonRect and isPointInRect(x, y, buttonRect) then
+                    menuState.levelSelect.currentLevel = i -- Set currentLevel to the actual index
+
+                    if i >= 1 and i <= menuState.levelSelect.maxLevel then
+                        -- Regular level selected
+                        currentState.isGrinding = false
+                        menuState.levelSelect.selectedGrindingLevelKey = nil
+                        print("[LEVEL SELECT] Regular Level " .. i .. " selected by mouse")
+                        GameData.startLevelDialogue(i)
+                        transitionGameState(gameState, "story")
+                    elseif i > menuState.levelSelect.maxLevel and i <= totalOptions then
+                        -- Grinding level selected
+                        local grindingIndex = i - menuState.levelSelect.maxLevel
+                        local grindingId = menuState.levelSelect.grindingLevelIds[grindingIndex]
+                        if grindingId then
+                            currentState.isGrinding = true
+                            currentState.currentGrindingLevelId = grindingId
+                            menuState.levelSelect.selectedGrindingLevelKey = grindingId
+                            print("[LEVEL SELECT] Grinding Level " .. grindingId .. " selected by mouse. isGrinding: " .. tostring(currentState.isGrinding))
+                            restartGame()
+                            transitionGameState(gameState, "battle")
+                        end
+                    end
                     handled = true
                     break
                 end
@@ -2894,6 +3067,10 @@ function love.mousepressed(x, y, button, istouch, presses)
                     break
                 end
             end
+        end
+        if currentState.isGrinding and battleState.leaveGrindingButtonArea and isPointInRect(x, y, battleState.leaveGrindingButtonArea) then
+            exitGrindingMode()
+            handled = true -- Assuming 'handled' variable is used to prevent other clicks
         end
     elseif gameState == "pause" then
         if pauseState.buttonAreas then
@@ -3090,27 +3267,72 @@ player.mp = player.maxMp
 player.isDefending = false
 player.combo = 0
 print("[GAME] Player settings reset")
-local currentEnemyData = enemyData[menuState.levelSelect.currentLevel]
-if not currentEnemyData then
-    print("[ERROR] Failed to load enemy data for level: " .. tostring(menuState.levelSelect.currentLevel))
-    return
+
+local currentEnemyDefinition
+local enemyDisplayNameKey
+local enemyImageKey
+local enemyAttackImageKey -- To store the specific attack image key
+
+if currentState.isGrinding and currentState.currentGrindingLevelId then
+    print("[GAME] Setting up grinding level: " .. currentState.currentGrindingLevelId)
+    local grindingLevelData = GameData.grindingLevels[currentState.currentGrindingLevelId]
+    if not grindingLevelData then
+        print("[ERROR] Failed to load grinding level data for ID: " .. currentState.currentGrindingLevelId)
+        -- Fallback to a default or handle error appropriately
+        return
+    end
+    if not grindingLevelData.enemyPool or #grindingLevelData.enemyPool == 0 then
+        print("[ERROR] Grinding level " .. currentState.currentGrindingLevelId .. " has an empty or undefined enemyPool.")
+        -- Fallback or error
+        return
+    end
+    local randomEnemyKey = grindingLevelData.enemyPool[math.random(#grindingLevelData.enemyPool)]
+    currentEnemyDefinition = enemyData[randomEnemyKey]
+    if not currentEnemyDefinition then
+        print("[ERROR] Failed to load enemy data for key: " .. randomEnemyKey .. " from grinding pool.")
+        return
+    end
+    enemyImageKey = currentEnemyDefinition.image
+    enemyAttackImageKey = currentEnemyDefinition.attackImage or currentEnemyDefinition.image -- Fallback for attack image
+    enemyDisplayNameKey = currentEnemyDefinition.displayNameKey
+    print("[GAME] Selected enemy for grinding: " .. randomEnemyKey .. " (Image: " .. enemyImageKey .. ", AttackImage: " .. (enemyAttackImageKey or "N/A") .. ")")
+else
+    print("[GAME] Setting up regular level: " .. menuState.levelSelect.currentLevel)
+    currentEnemyDefinition = enemyData[menuState.levelSelect.currentLevel]
+    if not currentEnemyDefinition then
+        print("[ERROR] Failed to load enemy data for regular level: " .. tostring(menuState.levelSelect.currentLevel))
+        return
+    end
+    enemyImageKey = currentEnemyDefinition.image
+    enemyAttackImageKey = currentEnemyDefinition.attackImage or currentEnemyDefinition.image
+    enemyDisplayNameKey = currentEnemyDefinition.displayNameKey
+    print("[GAME] Enemy for regular level " .. menuState.levelSelect.currentLevel .. ": Image: " .. enemyImageKey .. ", AttackImage: " .. (enemyAttackImageKey or "N/A"))
 end
+
 enemy = {
   x = positions.enemy.x,
   y = positions.enemy.y,
-  image = resources.images[currentEnemyData.image],
-  hp = validateNumber(currentEnemyData.hp, GAME_CONSTANTS.HP.MIN, GAME_CONSTANTS.HP.MAX, GAME_CONSTANTS.HP.BASE),
-  maxHp = validateNumber(currentEnemyData.maxHp, GAME_CONSTANTS.HP.MIN, GAME_CONSTANTS.HP.MAX, GAME_CONSTANTS.HP.BASE),
-  attack = validateNumber(currentEnemyData.attack, 1, math.huge, 10),
-  defense = validateNumber(currentEnemyData.defense, 0, math.huge, 5),
-  critRate = validateNumber(currentEnemyData.critRate, 0, GAME_CONSTANTS.MAX_CRIT_RATE, GAME_CONSTANTS.BASE_CRIT_RATE),
-  critDamage = validateNumber(currentEnemyData.critDamage, 1, GAME_CONSTANTS.MAX_CRIT_DAMAGE, GAME_CONSTANTS.BASE_CRIT_DAMAGE),
+  image = resources.images[enemyImageKey],
+  hp = validateNumber(currentEnemyDefinition.hp, GAME_CONSTANTS.HP.MIN, GAME_CONSTANTS.HP.MAX, GAME_CONSTANTS.HP.BASE),
+  maxHp = validateNumber(currentEnemyDefinition.maxHp, GAME_CONSTANTS.HP.MIN, GAME_CONSTANTS.HP.MAX, GAME_CONSTANTS.HP.BASE),
+  attack = validateNumber(currentEnemyDefinition.attack, 1, math.huge, 10),
+  defense = validateNumber(currentEnemyDefinition.defense, 0, math.huge, 5),
+  critRate = validateNumber(currentEnemyDefinition.critRate, 0, GAME_CONSTANTS.MAX_CRIT_RATE, GAME_CONSTANTS.BASE_CRIT_RATE),
+  critDamage = validateNumber(currentEnemyDefinition.critDamage, 1, GAME_CONSTANTS.MAX_CRIT_DAMAGE, GAME_CONSTANTS.BASE_CRIT_DAMAGE),
   isDefending = false,
   status = {},
-  combo = 0
+  combo = 0,
+  displayNameKey = enemyDisplayNameKey,
+  attackImageKey = enemyAttackImageKey -- Store the actual key for attack animation
 }
-print("[GAME] Enemy settings loaded for level " .. menuState.levelSelect.currentLevel)
-  battleState = {
+
+if currentState.isGrinding then
+    print("[GAME] Enemy settings loaded for grinding level " .. currentState.currentGrindingLevelId)
+else
+    print("[GAME] Enemy settings loaded for regular level " .. menuState.levelSelect.currentLevel)
+end
+
+battleState = {
       phase = "select",
       turn = "player",
       message = GameData.getText(currentGameLanguage, "battle_start"),
@@ -3123,7 +3345,10 @@ print("[GAME] Enemy settings loaded for level " .. menuState.levelSelect.current
       },
       currentOption = 1,
       buttonAreas = {},
-      effects = {}
+      effects = {},
+      victoryTriggered = false,
+      defeatTriggered = false,
+      leaveGrindingButtonArea = nil
   }
   for _, skill in pairs(skillSystem) do
     skill.cooldown = 0
@@ -3394,6 +3619,27 @@ function useItem(slotIndex)
     end
 end
 -- End Inventory Management Functions
+
+function exitGrindingMode()
+    if currentState.isGrinding then
+        print("[GRINDING] Exiting grinding mode.")
+        currentState.isGrinding = false
+        currentState.currentGrindingLevelId = nil
+
+        saveGame() -- Save progress as per plan
+
+        -- Stop battle music and potentially start menu music before transition
+        if resources.sounds.battleBgm and resources.sounds.battleBgm:isPlaying() then
+            resources.sounds.battleBgm:stop()
+        end
+        if not audioState.isMutedBGM and resources.sounds.menuBgm then
+             resources.sounds.menuBgm:setLooping(true)
+             resources.sounds.menuBgm:play()
+        end
+
+        transitionGameState(gameState, "levelSelect") -- Or "menu" if preferred
+    end
+end
 
 function performPlayerAttack()
     if skillSystem.attack.cooldown > 0 then
@@ -3951,7 +4197,20 @@ function updateCooldowns()
   end
 end
 function drawBattleScene()
-  local bgImage = resources.images[battleBackgrounds[menuState.levelSelect.currentLevel]]
+  local bgKey
+  if currentState.isGrinding and currentState.currentGrindingLevelId then
+    local grindingLevelData = GameData.grindingLevels[currentState.currentGrindingLevelId]
+    if grindingLevelData and grindingLevelData.battleBg then
+      bgKey = grindingLevelData.battleBg -- Use battleBg from grinding level definition
+    else
+      print("[ERROR] Grinding level data or battleBg missing for: " .. currentState.currentGrindingLevelId)
+      bgKey = "battleBgForest" -- Fallback
+    end
+  else
+    bgKey = battleBackgrounds[menuState.levelSelect.currentLevel] -- Regular level background
+  end
+
+  local bgImage = resources.images[bgKey]
   if bgImage then
       love.graphics.draw(bgImage, 0, 0, 0,
         love.graphics.getWidth()/bgImage:getWidth(),

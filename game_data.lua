@@ -56,6 +56,7 @@ M.story = {
           battle_action_desc_special = "Powerful attack with delay",
           battle_action_heal = "Heal",
           battle_action_desc_heal = "Restore health",
+          battle_action_leave_grinding = "Leave Training", -- NEW
           battle_msg_skill_cooldown = "Skill on cooldown!",
           battle_msg_not_enough_mp = "Not enough MP!", -- NEW
           skill_info_title = "Skill Information",
@@ -90,6 +91,7 @@ M.story = {
           battle_msg_enemy_defend = "Enemy enters defensive stance!",
           battle_msg_exp_gain = "Gained %{exp} EXP!", -- NEW
           battle_msg_level_up = "Level Up! LV %{level}!", -- NEW
+          grinding_next_opponent = "Next opponent incoming!", -- NEW for grinding mode
           player_stats_attack = "ATK", -- NEW
           player_stats_defense = "DEF", -- NEW
           player_stats_crit_rate = "CRT", -- NEW
@@ -132,6 +134,8 @@ M.story = {
           stat_label_crit_rate = "Crit Rate",
           stat_label_crit_damage = "Crit Damage",
           stats_screen_instructions = "Press ESC to go back",
+          -- Grinding Levels
+          grind_level_forest_easy_name = "Training Woods (Easy)",
           enemy_name_goblin = "Goblin",
           enemy_name_orc = "Orc",
           enemy_name_stonegolem = "Stone Golem",
@@ -142,6 +146,9 @@ M.story = {
           enemy_name_greendragon = "Green Dragon",
           enemy_name_reddragon = "Red Dragon",
           enemy_name_demonking = "Demon King",
+          -- Enemy Names (add new ones)
+          enemy_name_goblin_grunt = "Goblin Grunt",
+          enemy_name_slime_weak = "Weak Slime",
           story_page_title = "A Hero’s Redemption Story:",
           story_page_back_button = "Back to Menu",
           about_page_title = "About This Project:",
@@ -249,6 +256,7 @@ as the one who brought about "A Hero's Redemption."
           battle_action_desc_special = "強力的延遲攻擊",
           battle_action_heal = "治療",
           battle_action_desc_heal = "恢復生命值",
+          battle_action_leave_grinding = "離開修行", -- NEW
           battle_msg_skill_cooldown = "技能冷卻中！",
           battle_msg_not_enough_mp = "魔力不足！", -- NEW
           skill_info_title = "技能資訊",
@@ -283,6 +291,7 @@ as the one who brought about "A Hero's Redemption."
           battle_msg_enemy_defend = "敵人進入防禦姿態！",
           battle_msg_exp_gain = "獲得 %{exp} 經驗值！", -- NEW
           battle_msg_level_up = "升級！等級 %{level}！", -- NEW
+          grinding_next_opponent = "下一位對手來了！", -- NEW for grinding mode
           player_stats_attack = "攻擊", -- NEW
           player_stats_defense = "防禦", -- NEW
           player_stats_crit_rate = "暴擊率", -- NEW
@@ -325,6 +334,8 @@ as the one who brought about "A Hero's Redemption."
           stat_label_crit_rate = "暴擊率",
           stat_label_crit_damage = "暴擊傷害",
           stats_screen_instructions = "按 ESC 返回",
+          -- Grinding Levels
+          grind_level_forest_easy_name = "修行之森（簡單）",
           enemy_name_goblin = "哥布林",
           enemy_name_orc = "獸人",
           enemy_name_stonegolem = "石頭巨人",
@@ -335,6 +346,9 @@ as the one who brought about "A Hero's Redemption."
           enemy_name_greendragon = "綠龍",
           enemy_name_reddragon = "紅龍",
           enemy_name_demonking = "惡魔之王",
+          -- Enemy Names (add new ones)
+          enemy_name_goblin_grunt = "哥布林小兵",
+          enemy_name_slime_weak = "弱小史萊姆",
           story_page_title = "英雄的救贖 2D 故事：",
           story_page_back_button = "返回主選單",
           about_page_title = "關於此專案：",
@@ -557,7 +571,9 @@ as the one who brought about "A Hero's Redemption."
       isPlaying = false,
       currentLevel = 1,
       dialogueIndex = 1,
-      isEnding = false
+      isEnding = false,
+      isGrinding = false,
+      currentGrindingLevelId = nil
   },
   emotions = {
       worried = {color = {0.7, 0.7, 1}, scale = 1},
@@ -661,6 +677,14 @@ as the one who brought about "A Hero's Redemption."
         price = 5
     }
   }
+}
+
+M.grindingLevels = {
+    grinding_forest_easy = { -- Unique ID for the grinding level
+        name_key = "grind_level_forest_easy_name",
+        enemyPool = {"enemy_goblin_grunt", "enemy_slime_weak"}, -- Keys for new enemies to be defined in enemyData
+        battleBg = "battleBgForest" -- Existing battle background
+    }
 }
 
 -- Internal language state for the module
