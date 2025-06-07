@@ -1649,13 +1649,96 @@ function M.drawStatsScreen(statsScreenState, player, GameData, currentGameLangua
     love.graphics.printf(instructions, 0, windowHeight - statsScreenState.lineHeight - statsScreenState.padding, windowWidth, "center")
 end
 
+function M.drawCharacters(animations, resources, positions, enemy)
+  local windowWidth = love.graphics.getWidth()
+  local windowHeight = love.graphics.getHeight()
+
+  local playerImageKey = nil
+  if player.equipment.weapon then
+    local itemId = player.equipment.weapon
+    local itemData = GameData.items[itemId]
+    if itemData and itemData.model_key_player then
+      playerImageKey = itemData.model_key_player
+    end
+  end
+
+  local playerImage
+  if playerImageKey and resources.images[playerImageKey] then
+    playerImage = resources.images[playerImageKey]
+    -- If we want weapon sprites to also have attack animations,
+    -- we might need a naming convention like model_key_player .. "_attack"
+    -- For now, the weapon model overrides both stand and attack.
+  else
+    if animations.player.current == "stand" then
+        playerImage = resources.images.playerStand
+    else -- Assuming "attack" is the other main animation state
+        playerImage = resources.images.playerAttack
+    end
+  end
+
+  if not playerImage then
+    print("[ERROR] playerImage is nil in M.drawCharacters. Defaulting to playerStand.")
+    playerImage = resources.images.playerStand
+    if not playerImage then
+        print("[ERROR] Default playerStand image is also nil. Cannot draw player.")
+        return 
+    end
+  end
+
+  local playerScaleX = positions.player.maxWidth / playerImage:getWidth()
+  local playerScaleY = positions.player.maxHeight / playerImage:getHeight()
+  local playerScale = math.min(playerScaleX, playerScaleY)
+
+  if playerImage:getHeight() * playerScale < positions.player.minHeight then
+      playerScale = positions.player.minHeight / playerImage:getHeight()
+  end
+
+  local playerDrawX = positions.player.x - (playerImage:getWidth() * playerScale) / 2
+  local playerDrawY = positions.player.y - (playerImage:getHeight() * playerScale) / 2
+  love.graphics.draw(playerImage, playerDrawX, playerDrawY, 0, playerScale, playerScale)
+
+  local enemyStandImage = enemy.image
+  local enemyAttackImageActualKey = enemy.attackImageKey
+
+  local currentEnemySprite
+  if animations.enemy.current == "attack" then
+    if enemyAttackImageActualKey and resources.images[enemyAttackImageActualKey] then
+      currentEnemySprite = resources.images[enemyAttackImageActualKey]
+    else
+      currentEnemySprite = enemyStandImage
+    end
+  else
+    currentEnemySprite = enemyStandImage
+  end
+
+  if not currentEnemySprite then
+      print("[ERROR] Enemy sprite is nil in drawCharacters. Fallback.")
+      currentEnemySprite = resources.images.enemyDemonKing 
+      if not currentEnemySprite then
+          print("[ERROR] Default enemyDemonKing image is also nil. Cannot draw enemy.")
+          return 
+      end
+  end
+
+  local enemyImage = currentEnemySprite
+  local enemyScaleX = positions.enemy.maxWidth / enemyImage:getWidth()
+  local enemyScaleY = positions.enemy.maxHeight / enemyImage:getHeight()
+  local enemyScale = math.min(enemyScaleX, enemyScaleY)
+
+  if enemyImage:getHeight() * enemyScale < positions.enemy.minHeight then
+      enemyScale = positions.enemy.minHeight / enemyImage:getHeight()
+  end
+
+  local enemyDrawX = positions.enemy.x - (enemyImage:getWidth() * enemyScale) / 2
+  local enemyDrawY = positions.y - (enemyImage:getHeight() * enemyScale) / 2
+  love.graphics.draw(enemyImage, enemyDrawX, enemyDrawY, 0, enemyScale, enemyScale)
+end
+
 function M.drawHowToPlayPageUI(resources, howToPlayState, gameData, currentLanguage)
-    -- Background
     love.graphics.setColor(0.1, 0.1, 0.2, 1) -- Dark blue background
     love.graphics.rectangle("fill", 0, 0, screenWidth, screenHeight)
     love.graphics.setColor(1, 1, 1, 1) -- Reset color to white for text
 
-    -- Font Selection
     local uiFont = resources.fonts.ui
     local lineSpacing = uiFont:getHeight() * 1.5
     if currentLanguage == "zh" then

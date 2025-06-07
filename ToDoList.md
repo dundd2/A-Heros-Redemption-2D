@@ -51,18 +51,7 @@ Save/Load Impact: player stats, player.unlockedSkills (if used).
 
 Weapon Switching System
 Goal: Allow the player to equip different weapons affecting their combat abilities.
-Key Data Structures:
-GameData.items: Add type="weapon" items.
-Example weapon item: { name_key="weapon_iron_sword_name", description_key="...", icon_key="icon_sword", type="weapon", slot="main_hand", stats={attack=5, critRate=2}, model_key_player="player_sword_sprite" (optional) }
-player.equipment.weapon = "item_id_of_equipped_weapon" (see Equipment System).
-Core Logic:
-Equipping/Unequipping: Handled by the Equipment System.
-Stat Calculation: The Equipment System will be responsible for updating player.attack, player.critRate, etc., based on player.baseAttack + equippedWeapon.stats.attack.
-Visual Change:
-If player.image should change: When a weapon is equipped, check its model_key_player and update resources.images.playerStand/Attack or add a weapon sprite layer.
 UI Components: Part of Equipment/Inventory UI.
-Integration Points: Equipment System, Combat System (calculateDamage uses player.attack).
-Save/Load Impact: player.equipment (handled by Equipment System).
 
 Equipment System
 Goal: Allow player to equip items to enhance stats and potentially change appearance.
