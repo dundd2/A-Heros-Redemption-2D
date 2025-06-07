@@ -782,6 +782,12 @@ local function validateLanguage(lang)
 end
 
 function M.getText(language, key, params, defaultValue)
+  -- guard against nil key to avoid concat error
+  if not key then
+      print("[GameData.getText] Warning: 'key' is nil for language: " .. tostring(language))
+      return ""
+  end
+
   language = validateLanguage(language or currentLanguage)
   local langTable = M.story.text[language]
   if not langTable then

@@ -2,175 +2,33 @@
 -- This script contains the game's story, character definitions, level dialogues,
 -- and other game-related text in both English and Chinese.
 -- Build with love-12.0-win64 Beta
--- Created by Dundd2, 2025/1 ,Last update: 2025/5
+-- Created by Dundd2, 2025/1 ,Last update: 2025/6
 
-local loadingState = true
+local GameData = require("game_data")
+local GameLogic = require("game_logic") -- New: Require game_logic.lua
+local GameHelpers = require("game_helpers") -- New: Require game_helpers.lua
 
--- Loading screen specific resources (declared globally or at least before love.load)
-local loadingFont = nil
-local creatorLogo = nil
-local engineLogo = nil
-local gameGroupLogo = nil -- New variable for game group logo
+gameState = "loading" -- Initial state
+previousGameState = "menu" -- For inventory screen toggle
+currentGameLanguage = GameData.getCurrentLanguage() -- Get initial language from GameData
 
--- Function to draw the loading screen
-local function drawLoadingScreen()
-    love.graphics.clear(0, 0, 0) -- Black background
-    love.graphics.setColor(1, 1, 1) -- White text/images
+player = {}
+enemy = {}
+resources = {}
+animations = {}
+battleState = {}
+uiState = {}
+pauseState = {}
+resultState = {}
+menuState = {}
+optionsState = {}
+storyPageState = {}
+aboutPageState = {}
+inventoryState = {}
+questLogState = {}
+statsScreenState = {}
 
-    -- Fallback if font somehow not loaded (though it should be in love.load)
-    if not loadingFont then
-        loadingFont = love.graphics.newFont(24)
-    end
-    love.graphics.setFont(loadingFont)
-
-    local windowWidth = love.graphics.getWidth()
-    local windowHeight = love.graphics.getHeight()
-    local centerX = windowWidth / 2
-
-    local yOffset = windowHeight * 0.15 -- Starting Y position, adjusted for more space
-
-    -- Creator Info
-    local creatorText = "Created by Dundd2"
-    love.graphics.printf(creatorText, 0, yOffset, windowWidth, "center")
-    yOffset = yOffset + loadingFont:getHeight() + 10
-    if creatorLogo then
-        local logoWidth = creatorLogo:getWidth()
-        local logoHeight = creatorLogo:getHeight()
-        local targetHeight = 100
-        local scale = targetHeight / logoHeight
-        love.graphics.draw(creatorLogo, centerX - (logoWidth * scale) / 2, yOffset, 0, scale, scale)
-        yOffset = yOffset + targetHeight + 30
-    else
-        -- Placeholder if logo not found
-        love.graphics.setColor(0.5, 0.5, 0.5) -- Grey placeholder
-        love.graphics.rectangle("fill", centerX - 50, yOffset, 100, 100)
-        love.graphics.setColor(1,1,1) -- White text on placeholder
-        love.graphics.printf("Creator\nLogo", centerX - 50, yOffset + 30, 100, "center")
-        yOffset = yOffset + 100 + 30
-    end
-
-    -- Game Engine Info
-    local engineText = "Built with LÖVE2D"
-    love.graphics.printf(engineText, 0, yOffset, windowWidth, "center")
-    yOffset = yOffset + loadingFont:getHeight() + 10
-    if engineLogo then
-        local logoWidth = engineLogo:getWidth()
-        local logoHeight = engineLogo:getHeight()
-        local targetHeight = 100
-        local scale = targetHeight / logoHeight
-        love.graphics.draw(engineLogo, centerX - (logoWidth * scale) / 2, yOffset, 0, scale, scale)
-        yOffset = yOffset + targetHeight + 30
-    else
-        -- Placeholder if logo not found
-        love.graphics.setColor(0.5, 0.5, 0.5)
-        love.graphics.rectangle("fill", centerX - 50, yOffset, 100, 100)
-        love.graphics.setColor(1,1,1)
-        love.graphics.printf("Engine\nLogo", centerX - 50, yOffset + 30, 100, "center")
-        yOffset = yOffset + 100 + 30
-    end
-
-    -- Game Group Logo (using game title as placeholder for now)
-    local gameTitle = "A Hero's Redemption"
-    love.graphics.printf(gameTitle, 0, yOffset, windowWidth, "center")
-    yOffset = yOffset + loadingFont:getHeight() + 10
-    if gameGroupLogo then
-        local logoWidth = gameGroupLogo:getWidth()
-        local logoHeight = gameGroupLogo:getHeight()
-        local targetHeight = 100
-        local scale = targetHeight / logoHeight
-        love.graphics.draw(gameGroupLogo, centerX - (logoWidth * scale) / 2, yOffset, 0, scale, scale)
-        yOffset = yOffset + targetHeight + 30
-    else
-        -- Placeholder if logo not found
-        love.graphics.setColor(0.5, 0.5, 0.5)
-        love.graphics.rectangle("fill", centerX - 50, yOffset, 100, 100)
-        love.graphics.setColor(1,1,1)
-        love.graphics.printf("Group\nLogo", centerX - 50, yOffset + 30, 100, "center")
-        yOffset = yOffset + 100 + 30
-    end
-
-    -- Loading text at the bottom
-    love.graphics.printf("Loading...", 0, windowHeight - 50, windowWidth, "center")
-end
-local GameData = require("game_data") -- Require the new file
-
--- Global access to GameData's story state (for convenience)
-local currentState = GameData.story.currentState
-local currentGameLanguage = GameData.getCurrentLanguage() -- Get initial language from GameData
-local previousGameState = "menu" -- For inventory screen toggle
-local uiMessage = ""
-local uiMessageTimer = 0
-
-local function initText()
-  GameData.initText() -- Call the initText from GameData
-  currentGameLanguage = GameData.getCurrentLanguage() -- Sync the local variable
-end
-
-local function validateLanguage(lang)
-  return GameData.getText(lang, "dummy_key", nil, lang)
-end
-
-local function getText(language, key, params, defaultValue)
-  return GameData.getText(language, key, params, defaultValue)
-end
-
-local function setCurrentLanguage(language)
-  GameData.setCurrentLanguage(language)
-  currentGameLanguage = GameData.getCurrentLanguage()
-end
-
-function getCurrentLanguage()
-  return currentGameLanguage
-end
-
-local function loadResource(loadFunc, resourceType, assetPath, ...)
-  local success, resource = pcall(loadFunc, assetPath, ...)
-  if success then
-    print(string.format("[RESOURCE] Loaded %s: %s", resourceType, assetPath))
-    return resource
-  else
-    print(string.format("[ERROR] Failed to load %s: %s - %s", resourceType, assetPath, resource))
-    return nil
-  end
-end
-local function loadImage(assetPath)
-  return loadResource(love.graphics.newImage, "image", assetPath)
-end
-local function loadSound(assetPath, type)
-  return loadResource(love.audio.newSource, "sound", assetPath, type)
-end
-local function loadFont(assetPath, size)
-  return loadResource(love.graphics.newFont, "font", assetPath, size)
-end
-local audioState = {
-  isMutedBGM = false,
-  isMutedSFX = false
-}
-playerSettings = {
-    isCheatMode = false,
-    isInfiniteHP = false,
-    fontScale = 1.0,
-    isFullScreen = false,
-}
-screenWidth = 1880
-screenHeight = 720
-local availableResolutions = {
-    {width = 1920, height = 1080, name = "1920x1080 (Full HD)"},
-    {width = 1280, height = 720, name = "1280x720 (HD)"},
-    {width = 854, height = 480, name = "854x480 (SD)"},
-    {width = 640, height = 360, name = "640x360 (Low)"}
-}
-local currentResolutionIndex = 1
-storyPageState = {
-  storyText = "",
-  scrollPosition = 0,
-  backButtonArea = {},
-  navDelay = 0.3,
-}
-aboutPageState = {
-    scrollPosition = 0,
-    backButtonArea = {},
-}
+-- Global Constants (can be accessed directly)
 GAME_CONSTANTS = {
     MIN_DAMAGE = 1,
     MAX_DAMAGE_MULTIPLIER = 3.0,
@@ -208,208 +66,41 @@ GAME_CONSTANTS = {
         MESSAGE_DURATION = 2.0
     }
 }
-function validateNumber(value, min, max, default)
-    if type(value) ~= "number" or value ~= value then
-        return default
-    end
-    return math.max(min, math.min(max, value))
-end
-local VALID_GAME_STATES = {
-    menu = true,
-    battle = true,
-    story = true,
-    pause = true,
-    victory = true,
-    defeat = true,
-    options = true,
-    storyPage = true,
-    levelSelect = true,
-    aboutPage = true,
-    inventoryScreen = true,
-    questLogScreen = true, -- New state
-    statsScreen = true, -- New state
+
+playerSettings = {
+    isCheatMode = false,
+    isInfiniteHP = false,
+    fontScale = 1.0,
+    isFullScreen = false,
 }
-local VALID_BATTLE_PHASES = {
-    select = true,
-    action = true,
-    result = true
+
+audioState = {
+  isMutedBGM = false,
+  isMutedSFX = false
 }
-local function validateGameState(state)
-    if not VALID_GAME_STATES[state] then
-        print("[ERROR] Invalid game state: " .. tostring(state))
-        return "menu"
-    end
-    return state
-end
-local function validateBattlePhase(phase)
-    if not VALID_BATTLE_PHASES[phase] then
-        print("[ERROR] Invalid battle phase: " .. tostring(phase))
-        return "select"
-    end
-    return phase
-end
 
--- Place this near other game constants or helper tables
-EQUIPPABLE_STATS = {"attack", "defense", "maxHp", "maxMp", "critRate", "critDamage"}
--- Add other stats like "speed", "magicResist" if they become relevant later
+-- Screen and Resolution
+screenWidth = 1880
+screenHeight = 720
+local availableResolutions = {
+    {width = 1920, height = 1080, name = "1920x1080 (Full HD)"},
+    {width = 1280, height = 720, name = "1280x720 (HD)"},
+    {width = 854, height = 480, name = "854x480 (SD)"},
+    {width = 640, height = 360, name = "640x360 (Low)"}
+}
+local currentResolutionIndex = 1
 
-function recalculatePlayerStats()
-    print("[STATS] Recalculating player stats (HP/MP adjustment)...")
+-- UI Messages (for temporary pop-ups)
+uiMessage = ""
+uiMessageTimer = 0
 
-    -- Ensure HP/MP consistency after maxHP/maxMP changes.
-    -- The actual stat changes (attack, defense etc.) will be done incrementally
-    -- by equipItem and unequipItem functions.
+-- Loading screen specific resources
+local loadingFont = nil
+local creatorLogo = nil
+local engineLogo = nil
+local gameGroupLogo = nil
 
-    if player.maxHp <= 0 then player.maxHp = 1 end -- Prevent division by zero or weird HP
-    player.hp = math.min(player.hp, player.maxHp)
-    player.hp = math.max(0, player.hp) -- Ensure HP isn't negative
-
-    if player.maxMp <= 0 then player.maxMp = 1 end
-    player.mp = math.min(player.mp, player.maxMp)
-    player.mp = math.max(0, player.mp)
-
-    print(string.format("[STATS] Player stats after HP/MP adjustment: HP %d/%d, MP %d/%d", player.hp, player.maxHp, player.mp, player.maxMp))
-end
-
-function transitionGameState(from, to)
-    local validatedFrom = validateGameState(from or "menu")
-    local validatedTo = validateGameState(to)
-    if validatedFrom == validatedTo and from ~= nil then
-        if validatedFrom == "options" and to == "options" then
-        else
-            return false
-        end
-    end
-    if not audioState.isMutedBGM then
-        if resources.sounds.menuBgm and resources.sounds.menuBgm:isPlaying() then
-            resources.sounds.menuBgm:stop()
-            print("[AUDIO] Stopped Menu BGM.")
-        end
-        if resources.sounds.battleBgm and resources.sounds.battleBgm:isPlaying() then
-            resources.sounds.battleBgm:stop()
-            print("[AUDIO] Stopped Battle BGM.")
-        end
-        if resources.sounds.victory and resources.sounds.victory:isPlaying() then
-            resources.sounds.victory:stop()
-            print("[AUDIO] Stopped Victory Music.")
-        end
-        if resources.sounds.defeat and resources.sounds.defeat:isPlaying() then
-            resources.sounds.defeat:stop()
-            print("[AUDIO] Stopped Defeat Music.")
-        end
-        if GameData.story.levelIntros[currentState.currentLevel] and GameData.story.levelIntros[currentState.currentLevel].music and resources.sounds[GameData.story.levelIntros[currentState.currentLevel].music] and resources.sounds[GameData.story.levelIntros[currentState.currentLevel].music]:isPlaying() then
-            resources.sounds[GameData.story.levelIntros[currentState.currentLevel].music]:stop()
-            print("[AUDIO] Stopped Level Specific BGM.")
-        end
-        local endingType = GameData.determineEnding()
-        if validatedFrom == "ending" then
-            if GameData.story.ending[endingType] and GameData.story.ending[endingType].music and resources.sounds[GameData.story.ending[endingType].music] and resources.sounds[GameData.story.ending[endingType].music]:isPlaying() then
-                resources.sounds[GameData.story.ending[endingType].music]:stop()
-                print("[AUDIO] Stopped Ending BGM.")
-            end
-        end
-
-        if validatedTo == "menu" or validatedTo == "options" or validatedTo == "levelSelect" or validatedTo == "storyPage" or validatedTo == "aboutPage" or validatedTo == "inventoryScreen" or validatedTo == "questLogScreen" or validatedTo == "statsScreen" then
-            if resources.sounds.menuBgm then
-                resources.sounds.menuBgm:setLooping(true)
-                resources.sounds.menuBgm:play()
-                print("[AUDIO] Started Menu BGM.")
-            end
-            if validatedTo == "questLogScreen" then -- Add this block
-                questLogState.currentTab = "active" -- Default to active tab
-                questLogState.selectedQuestIndex = 1
-                questLogState.activeQuestScrollOffset = 0
-                questLogState.completedQuestScrollOffset = 0
-
-                -- Attempt to select the first quest in the active tab
-                local firstActiveQuestId = nil
-                if player.activeQuests then
-                    local tempActiveQuests = {}
-                    for id, _ in pairs(player.activeQuests) do table.insert(tempActiveQuests, {id=id}) end
-                    if #tempActiveQuests > 0 then
-                        table.sort(tempActiveQuests, function(a,b) return a.id < b.id end)
-                        firstActiveQuestId = tempActiveQuests[1].id
-                    end
-                end
-                questLogState.selectedQuestId = firstActiveQuestId
-            end
-        elseif validatedTo == "battle" then
-            if resources.sounds.battleBgm then
-                resources.sounds.battleBgm:setLooping(true)
-                resources.sounds.battleBgm:play()
-                print("[AUDIO] Started Battle BGM.")
-            end
-        elseif validatedTo == "victory" then
-            if resources.sounds.victory then
-                resources.sounds.victory:setLooping(false)
-                resources.sounds.victory:play()
-                print("[AUDIO] Started Victory Music.")
-            end
-        elseif validatedTo == "defeat" then
-            if resources.sounds.defeat then
-                resources.sounds.defeat:setLooping(false)
-                resources.sounds.defeat:play()
-                print("[AUDIO] Started Defeat Music.")
-            end
-        elseif validatedTo == "story" then
-            local currentLevelIntro = GameData.story.levelIntros[currentState.currentLevel]
-            if currentLevelIntro and currentLevelIntro.music and resources.sounds[currentLevelIntro.music] then
-                resources.sounds[currentLevelIntro.music]:setLooping(true)
-                resources.sounds[currentLevelIntro.music]:play()
-                print("[AUDIO] Started Story BGM: " .. currentLevelIntro.music)
-            else
-                if resources.sounds.battleBgm then
-                    resources.sounds.battleBgm:setLooping(true)
-                    resources.sounds.battleBgm:play()
-                    print("[AUDIO] Started Battle BGM (fallback for story).")
-                end
-            end
-        elseif validatedTo == "ending" then
-            local determinedEndingType = GameData.determineEnding()
-            local currentEnding = GameData.story.ending[determinedEndingType]
-            if currentEnding and currentEnding.music and resources.sounds[currentEnding.music] then
-                resources.sounds[currentEnding.music]:setLooping(false)
-                resources.sounds[currentEnding.music]:play()
-                print("[AUDIO] Started Ending BGM: " .. currentEnding.music)
-            else
-                if resources.sounds.menuBgm then
-                    resources.sounds.menuBgm:setLooping(true)
-                    resources.sounds.menuBgm:play()
-                    print("[AUDIO] Started Menu BGM (fallback for ending).")
-                end
-            end
-        elseif validatedTo == "pause" then
-        end
-    else
-        love.audio.stop()
-        print("[AUDIO] BGM is muted, all audio stopped.")
-    end
-    if validatedTo == "battle" then
-        battleState.phase = validateBattlePhase("select")
-        battleState.turn = "player"
-        battleState.message = getText(currentGameLanguage, "battle_start")
-        battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-    elseif validatedFrom == "battle" then
-    end
-    gameState = validatedTo
-    print(string.format("[GAME STATE] Transitioned from '%s' to '%s'", validatedFrom, validatedTo))
-    return true
-end
-local function initFonts()
-    local scale = GAME_CONSTANTS.FONT_SIZE_OPTIONS[GAME_CONSTANTS.currentFontSizeIndex] or 1.0
-    resources.fonts.ui = loadFont("assets/ui-font.ttf", math.floor(GAME_CONSTANTS.FONT_SIZES.UI * scale))
-    resources.fonts.battle = loadFont("assets/battle-font.ttf", math.floor(GAME_CONSTANTS.FONT_SIZES.BATTLE * scale))
-    resources.fonts.damage = loadFont("assets/damage-font.ttf", math.floor(GAME_CONSTANTS.FONT_SIZES.DAMAGE * scale))
-    resources.fonts.chineseUI = loadFont("assets/chinese-font.ttf", math.floor(GAME_CONSTANTS.FONT_SIZES.UI_CHINESE * scale))
-    resources.fonts.chineseBattle = loadFont("assets/chinese-font.ttf", math.floor(GAME_CONSTANTS.FONT_SIZES.BATTLE_CHINESE * scale))
-    print(string.format("[GAME] Fonts initialized with scale: %.1f", scale))
-end
-function applyFontSizeChange()
-    initFonts()
-end
-
-inventoryState = {}
-
+-- LÖVE2D Callbacks
 function love.load()
   print("[GAME] love.load() - Game loading started")
   screenWidth = availableResolutions[currentResolutionIndex].width
@@ -417,547 +108,106 @@ function love.load()
   love.window.setMode(screenWidth, screenHeight, {resizable = false, vsync = true, fullscreen = playerSettings.isFullScreen})
   print("[GAME] Set window mode to " .. screenWidth .. "x" .. screenHeight)
 
-  loadingFont = loadFont("assets/ui-font.ttf", 24)
-  creatorLogo = loadImage("assets/author_portrait.png")
-  engineLogo = loadImage("assets/love2d_logo.png")
-  gameGroupLogo = loadImage("assets/game_group_logo.png")
+  -- Load loading screen assets first
+  loadingFont = GameLogic.loadFont("assets/ui-font.ttf", 24)
+  creatorLogo = GameLogic.loadImage("assets/author_portrait.png")
+  engineLogo = GameLogic.loadImage("assets/love2d_logo.png")
+  gameGroupLogo = GameLogic.loadImage("assets/game_group_logo.png")
 
-  drawLoadingScreen()
+  -- Draw initial loading screen
+  GameHelpers.drawLoadingScreen(loadingFont, creatorLogo, engineLogo, gameGroupLogo)
   love.graphics.present()
-  love.timer.sleep(0.5)
+  love.timer.sleep(0.5) -- Give a moment for the user to see the loading screen
 
-  camera = {
-      x = 0,
-      y = 0,
-      scale = 1
-  }
-timers = {}
-print("[GAME] Timer system initialized")
-resources = {
-  images = {
-    background = loadImage("assets/background.png"),
-    dialogBox = loadImage("assets/dialog-box.png"),
-    uiFrame = loadImage("assets/battle-ui-frame.png"),
-    playerStand = loadImage("assets/player-stand.png"),
-    playerAttack = loadImage("assets/player-attack.png"),
-    battleBgForest = loadImage("assets/battle-bg-forest.png"),
-    battleBgCave = loadImage("assets/battle-bg-cave.png"),
-    battleBgDungeon = loadImage("assets/battle-bg-dungeon.png"),
-    battleBgCastle = loadImage("assets/battle-bg-castle.png"),
-    hitEffect = loadImage("assets/effect-hit.png"),
-    defendEffect = loadImage("assets/effect-defend.png"),
-    skillDefend = loadImage("assets/skill-defend.png"),
-    skillSpecial = loadImage("assets/skill-special.png"),
-    skillHeal = loadImage("assets/skill-heal.png"),
-    skillAttack = loadImage("assets/skill-attack.png"),
-    cooldownOverlay = loadImage("assets/cooldown-overlay.png"),
-    portraitHero = loadImage("assets/portrait-hero.png"),
-    portraitKing = loadImage("assets/portrait-king.png"),
-    portraitPrincess = loadImage("assets/portrait-princess.png"),
-    portraitDemonKing = loadImage("assets/portrait-demonking.png"),
-    enemyDemonKing = loadImage("assets/enemy-demonking.png"),
-    enemy_level1_stand = loadImage("assets/enemy_level1_stand.png"),
-    enemy_level1_attack = loadImage("assets/enemy_level1_attack.png"),
-    enemy_level2_stand = loadImage("assets/enemy_level2_stand.png"),
-    enemy_level2_attack = loadImage("assets/enemy_level2_attack.png"),
-    enemy_level3_stand = loadImage("assets/enemy_level3_stand.png"),
-    enemy_level3_attack = loadImage("assets/enemy_level3_attack.png"),
-    enemy_level4_stand = loadImage("assets/enemy_level4_stand.png"),
-    enemy_level4_attack = loadImage("assets/enemy_level4_attack.png"),
-    enemy_level5_stand = loadImage("assets/enemy_level5_stand.png"),
-    enemy_level5_attack = loadImage("assets/enemy_level5_attack.png"),
-    enemy_level6_stand = loadImage("assets/enemy_level6_stand.png"),
-    enemy_level6_attack = loadImage("assets/enemy_level6_attack.png"),
-    enemy_level7_stand = loadImage("assets/enemy_level7_stand.png"),
-    enemy_level7_attack = loadImage("assets/enemy_level7_attack.png"),
-    enemy_level8_stand = loadImage("assets/enemy_level8_stand.png"),
-    enemy_level8_attack = loadImage("assets/enemy_level8_attack.png"),
-    enemy_level9_stand = loadImage("assets/enemy_level9_stand.png"),
-    enemy_level9_attack = loadImage("assets/enemy_level9_attack.png"),
-    enemy_level10_stand = loadImage("assets/enemy_level10_stand.png"),
-    enemy_level10_attack = loadImage("assets/enemy_level10_attack.png"),
-    authorPortrait = loadImage("assets/author_portrait.png")
-  },
-     sounds = {
-         crit = loadSound("assets/crit.mp3", "static"),
-         attack = loadSound("assets/attack.mp3", "static"),
-         heal = loadSound("assets/heal.mp3", "static"),
-         special = loadSound("assets/special.mp3", "static"),
-         defend = loadSound("assets/defend.mp3", "static"),
-         victory = loadSound("assets/victory.mp3", "static"),
-         defeat = loadSound("assets/defeat.mp3", "static"),
-         menuBgm = loadSound("assets/menu.mp3", "stream"),
-         battleBgm = loadSound("assets/battle.mp3", "stream"),
-         attackLight = loadSound("assets/attack-light.mp3", "static"),
-         attackHeavy = loadSound("assets/attack-heavy.mp3", "static"),
-         enemyHit1 = loadSound("assets/enemy-hit1.mp3", "static"),
-         enemyHit2 = loadSound("assets/enemy-hit2.mp3", "static"),
-         palaceTheme = loadSound("assets/palaceTheme.mp3", "stream"),
-         finalBattle = loadSound("assets/finalBattle.mp3", "stream"),
-         menuSelect = loadSound("assets/menu_select.wav", "static"),
-      },
-  fonts = {}
-}
-print("[GAME] Resources loaded")
-initFonts()
-enemyData = {
-  [1] = {
-    image = "enemy_level1_stand",
-    attackImage = "enemy_level1_attack",
-    hp = 20,
-    maxHp = 20,
-    attack = 5,
-    defense = 2,
-    critRate = 4,
-    critDamage = 1.2,
-    ai = "basic",
-    expReward = 25,
-    displayNameKey = "enemy_name_goblin"
-  },
-  [2] = {
-    image = "enemy_level2_stand",
-    attackImage = "enemy_level2_attack",
-    hp = 30,
-    maxHp = 30,
-    attack = 6,
-    defense = 3,
-    critRate = 4,
-    critDamage = 1.2,
-    ai = "basic",
-    expReward = 35,
-    displayNameKey = "enemy_name_orc"
-  },
-  [3] = {
-    image = "enemy_level3_stand",
-    attackImage = "enemy_level3_attack",
-    hp = 40,
-    maxHp = 40,
-    attack = 7,
-    defense = 4,
-    critRate = 5,
-    critDamage = 1.25,
-    ai = "basic",
-    expReward = 50,
-    displayNameKey = "enemy_name_stonegolem"
-  },
-  [4] = {
-    image = "enemy_level4_stand",
-    attackImage = "enemy_level4_attack",
-    hp = 50,
-    maxHp = 50,
-    attack = 8,
-    defense = 5,
-    critRate = 5,
-    critDamage = 1.25,
-    ai = "basic",
-    expReward = 60,
-    displayNameKey = "enemy_name_skeletonwarrior"
-  },
-  [5] = {
-    image = "enemy_level5_stand",
-    attackImage = "enemy_level5_attack",
-    hp = 70,
-    maxHp = 70,
-    attack = 9,
-    defense = 6,
-    critRate = 6,
-    critDamage = 1.3,
-    ai = "basic",
-    expReward = 80,
-    displayNameKey = "enemy_name_darkknight"
-  },
-  [6] = {
-    image = "enemy_level6_stand",
-    attackImage = "enemy_level6_attack",
-    hp = 90,
-    maxHp = 90,
-    attack = 10,
-    defense = 7,
-    critRate = 6,
-    critDamage = 1.3,
-    ai = "basic",
-    expReward = 100,
-    displayNameKey = "enemy_name_banshee"
-  },
-  [7] = {
-    image = "enemy_level7_stand",
-    attackImage = "enemy_level7_attack",
-    hp = 110,
-    maxHp = 110,
-    attack = 11,
-    defense = 8,
-    critRate = 7,
-    critDamage = 1.35,
-    ai = "basic",
-    expReward = 120,
-    displayNameKey = "enemy_name_minotaur"
-  },
-  [8] = {
-    image = "enemy_level8_stand",
-    attackImage = "enemy_level8_attack",
-    hp = 130,
-    maxHp = 130,
-    attack = 12,
-    defense = 9,
-    critRate = 7,
-    critDamage = 1.35,
-    ai = "basic",
-    expReward = 140,
-    displayNameKey = "enemy_name_greendragon"
-  },
-  [9] = {
-    image = "enemy_level9_stand",
-    attackImage = "enemy_level9_attack",
-    hp = 150,
-    maxHp = 150,
-    attack = 13,
-    defense = 10,
-    critRate = 8,
-    critDamage = 1.4,
-    ai = "basic",
-    expReward = 160,
-    displayNameKey = "enemy_name_reddragon"
-  },
-  [10] = {
-    image = "enemy_level10_stand",
-    attackImage = "enemy_level10_attack",
-    hp = 200,
-    maxHp = 200,
-    attack = 20,
-    defense = 12,
-    critRate = 15,
-    critDamage = 1.75,
-    ai = "tactical",
-    expReward = 500,
-    displayNameKey = "enemy_name_demonking"
-  }
-}
-print("[GAME] Enemy data loaded")
-battleBackgrounds = {
-  [1] = "battleBgForest",
-  [2] = "battleBgForest",
-  [3] = "battleBgCave",
-  [4] = "battleBgCave",
-  [5] = "battleBgDungeon",
-  [6] = "battleBgDungeon",
-  [7] = "battleBgCastle",
-  [8] = "battleBgCastle",
-  [9] = "battleBgCastle",
-  [10] = "battleBgCastle"
-}
-print("[GAME] Battle backgrounds loaded")
-enemyAI = {
-  basic = {
-    decideAction = function(enemy, player)
-      return math.random() < 0.7 and "attack" or "defend"
-    end
-  },
-  aggressive = {
-    decideAction = function(enemy, player)
-      return math.random() < 0.9 and "attack" or "defend"
-    end
-  },
-  tactical = {
-    decideAction = function(enemy, player)
-      if enemy.hp < enemy.maxHp * 0.3 then
-        return "defend"
-      elseif player.hp < player.maxHp * 0.5 then
-        return "attack"
-      else
-        return math.random() < 0.6 and "attack" or "defend"
-      end
-    end
-  }
-}
-print("[GAME] Enemy AI patterns loaded")
-  screenWidth = love.graphics.getWidth()
-  screenHeight = love.graphics.getHeight()
-positions = {
+  -- Initialize global tables (important for GameLogic and GameHelpers to access them)
+  -- These must be fully defined before passing to GameLogic.setGlobals and GameHelpers.setGlobals
   player = {
-    x = screenWidth * 0.25,
-    y = screenHeight * 0.5,
-    scale = 1.0,
-    maxWidth = screenWidth * 0.4,
-    maxHeight = screenHeight * 0.6,
-    minHeight = screenHeight * 0.2,
-  },
-  enemy = {
-    x = screenWidth * 0.75,
-    y = screenHeight * 0.5,
-    scale = 1.0,
-    maxWidth = screenWidth * 0.4,
-    maxHeight = screenHeight * 0.6,
-    minHeight = screenHeight * 0.2,
-  },
-  playerHP = {x = screenWidth * 0.02, y = screenHeight * 0.02},
-  enemyHP = {x = screenWidth * 0.78, y = screenHeight * 0.02},
-  playerUI = {x = screenWidth * 0.02, y = screenHeight * 0.75},
-  enemyUI = {x = screenWidth * 0.68, y = screenHeight * 0.75}
-}
-print("[GAME] Battle positions defined")
-animations = {
-  player = {
-    current = "stand",
-    timer = 0,
-    x = positions.player.x,
-    y = positions.player.y,
-    originalX = positions.player.x
-  },
-  enemy = {
-    current = "stand",
-    timer = 0,
-    x = positions.enemy.x,
-    y = positions.enemy.y,
-    originalX = positions.enemy.x
-  },
-  effects = {}
-}
-print("[GAME] Animation states initialized")
-player = {
-  x = 100,
-  y = 300,
-  speed = 200,
-  image = resources.images.playerStand,
-  hp = 100,
-  maxHp = 100,
-  mp = 50,
-  maxMp = 50,
-  level = 1,
-  exp = 0,
-  expToNextLevel = 100,
-  attack = 10,
-    critRate = 10,
-    critDamage = 1.5,
-  defense = 5,
-  isDefending = false,
-  status = {},
-  combo = 0,
-  activeQuests = {},
-  completedQuests = {},
-  inventoryCapacity = 20,
-  inventory = {},
-  equipment = {
-      head = nil,
-      chest = nil,
-      legs = nil,
-      weapon = nil,
-      accessory1 = nil,
-      accessory2 = nil
+    x = 100, y = 300, speed = 200, image = nil,
+    hp = 100, maxHp = 100, mp = 50, maxMp = 50,
+    level = 1, exp = 0, expToNextLevel = 100,
+    attack = 10, critRate = 10, critDamage = 1.5, defense = 5,
+    isDefending = false, status = {}, combo = 0,
+    activeQuests = {}, completedQuests = {},
+    inventoryCapacity = 20, inventory = {},
+    equipment = {
+        head = nil, chest = nil, legs = nil,
+        weapon = nil, accessory1 = nil, accessory2 = nil
+    }
   }
-}
-print("[GAME] Player settings initialized (with EXP/MP)")
-for i = 1, player.inventoryCapacity do
-    player.inventory[i] = nil
-end
+  for i = 1, player.inventoryCapacity do player.inventory[i] = nil end
 
-inventoryState = {
-    selectedSlot = 1,
-    slotCols = 5,
-    slotRows = 4,
-    slotWidth = 100,
-    slotHeight = 80,
-    slotPadding = 10,
-    gridStartX = 50,
-    gridStartY = 100,
-    detailsX = 0,
-    detailsY = 100,
-    uiMessage = "", -- Added for inventory messages
-    uiMessageTimer = 0, -- Added for inventory messages
-    currentFocus = "inventory", -- "inventory" or "equipment"
-    selectedEquipmentSlotKey = nil, -- e.g., "head", "weapon"
-    equipmentSlotOrder = {"weapon", "head", "chest", "legs", "accessory1", "accessory2"}, -- Define display order
-    equipmentSlotDisplayAreas = {}, -- For drawing and mouse clicks
-    equipmentPanel = { x = 0, y = 0, width = 0, height = 0 } -- Define panel area
-}
-inventoryState.slotRows = math.ceil(player.inventoryCapacity / inventoryState.slotCols)
-inventoryState.detailsX = inventoryState.gridStartX + (inventoryState.slotWidth + inventoryState.slotPadding) * inventoryState.slotCols + 20
+  enemy = {
+    x = 600, y = 300, image = nil,
+    hp = 80, maxHp = 80, attack = 8, critRate = 5, critDamage = 1.2, defense = 3,
+    isDefending = false, status = {}, combo = 0,
+    displayNameKey = nil, attackImageKey = nil
+  }
 
-questLogState = {
-    currentTab = "active", -- "active" or "completed"
-    selectedQuestId = nil,
-    activeQuestScrollOffset = 0,
-    completedQuestScrollOffset = 0,
-    questsPerPage = 5, -- Example, can be adjusted
-    tabAreas = {}, -- For mouse interaction later
-    questListArea = {}, -- For mouse interaction later
-    detailsArea = {}, -- For layout
-    lineHeight = 0, -- Will be set based on font
-    padding = 10,
-    selectedQuestIndex = 1, -- Index in the current list view
-    navDelayTimer = 0,      -- Timer for input delay
-    navDelay = 0.15        -- Delay between inputs
-}
+  resources = {
+    images = {},
+    sounds = {},
+    fonts = {},
+    particleSystems = {}
+  }
 
-statsScreenState = {
-    padding = 20,
-    lineHeight = 0, -- Will be set based on font
-    labelColumnWidth = 0, -- For alignment
-    valueColumnX = 0 -- For alignment
-}
+  animations = {
+    player = { current = "stand", timer = 0, x = 0, y = 0, originalX = 0 },
+    enemy = { current = "stand", timer = 0, x = 0, y = 0, originalX = 0 },
+    effects = {}
+  }
 
-enemy = {
-  x = 600,
-  y = 300,
-  image = nil,
-  hp = 80,
-  maxHp = 80,
-  attack = 8,
-   critRate = 5,
-    critDamage = 1.2,
-  defense = 3,
-  isDefending = false,
-  status = {},
-  combo = 0
-}
-print("[GAME] Default enemy settings initialized")
-battleState = {
-  phase = "select",
-  turn = "player",
-  message = GameData.getText(currentGameLanguage, "battle_start"),
-  messageTimer = 2,
-  options = {
-    {name = "Attack", description = "Deal damage to enemy"},
-    {name = "Defend", description = "Reduce incoming damage"},
-    {name = "Special", description = "Powerful attack with delay"},
+  battleState = {
+    phase = "select", turn = "player", message = "", messageTimer = 0,
+    options = {
+      {name = "Attack", description = "Deal damage to enemy"},
+      {name = "Defend", description = "Reduce incoming damage"},
+      {name = "Special", description = "Powerful attack with delay"},
       {name = "Heal", description = "Restore health"},
-  },
-  currentOption = 1,
-  buttonAreas = {},
-  effects = {},
-  victoryTriggered = false,
-  defeatTriggered = false,
-  leaveGrindingButtonArea = nil -- Will be defined in drawBattleUI if in grinding mode
-}
-print("[GAME] Battle state initialized")
-  uiState = {
-      showSkillInfo = false,
-      selectedSkill = 1,
-  }
-  pauseState = {
-      isPaused = false,
-      options = {
-        {
-          textKey = "pause_continue",
-          action = function() resumeBattle() end
-        },
-        {textKey = "pause_restart", action = function() restartGame() end},
-        {textKey = "pause_main_menu", action = function() transitionGameState(gameState, "menu") end},
-        {textKey = "pause_quit_game", action = function() love.event.quit() end}
     },
-    currentOption = 1,
-    buttonAreas = {},
-    navDelay = 0.3,
+    currentOption = 1, buttonAreas = {}, effects = {},
+    victoryTriggered = false, defeatTriggered = false, leaveGrindingButtonArea = nil
   }
+
+  uiState = { showSkillInfo = false, selectedSkill = 1 }
+
+  pauseState = {
+    isPaused = false,
+    options = {
+      {textKey = "pause_continue", action = function() GameHelpers.resumeBattle() end},
+      {textKey = "pause_restart", action = function() GameHelpers.restartGame() end},
+      {textKey = "pause_main_menu", action = function() GameHelpers.transitionGameState(gameState, "menu") end},
+      {textKey = "pause_quit_game", action = function() love.event.quit() end}
+    },
+    currentOption = 1, buttonAreas = {}, navDelay = 0.3,
+  }
+
   resultState = {
     options = {
-      {textKey = "result_restart", action = function() restartGame() end},
-      {textKey = "result_main_menu", action = function() transitionGameState(gameState, "menu") end}
+      {textKey = "result_restart", action = function() GameHelpers.restartGame() end},
+      {textKey = "result_main_menu", action = function() GameHelpers.transitionGameState(gameState, "menu") end}
     },
-    currentOption = 1,
-    buttonAreas = {}
+    currentOption = 1, buttonAreas = {}
   }
-  print("[GAME] Result state initialized")
 
-   gameState = "menu"
-    local hitParticleSystemTemplate = function()
-      local ps = love.graphics.newParticleSystem(resources.images.hitEffect, 100)
-      ps:setParticleLifetime(0.2, 0.5)
-      ps:setSpeed(100, 200)
-      ps:setDirection(0, 360)
-      ps:setSpread(math.pi / 4)
-      ps:setEmissionRate(50)
-      ps:setSizes(0.3, 0.1)
-      ps:setRotation(0, 360)
-      ps:setLinearAcceleration(-50, 50, -50, 50)
-      return ps
-    end
-    local defendParticleSystemTemplate = function()
-      local ps = love.graphics.newParticleSystem(resources.images.defendEffect, 100)
-      ps:setParticleLifetime(0.2, 0.5)
-      ps:setSpeed(50, 100)
-      ps:setDirection(0, 360)
-      ps:setSpread(math.pi / 4)
-      ps:setEmissionRate(50)
-      ps:setSizes(0.3, 0.1)
-      ps:setRotation(0, 360)
-      ps:setLinearAcceleration(-20, 20, -20, 20)
-      return ps
-    end
-    resources.particleSystems = {
-      hit = hitParticleSystemTemplate,
-      defend = defendParticleSystemTemplate,
-      heal = defendParticleSystemTemplate,
-    }
- print("[GAME] Particle systems initialized")
-  skillInfo = {
-      {
-          name = "Basic Attack",
-          description = "A basic attack skill.",
-          details = "Deal small physical damage to enemy.",
-          type = "offensive",
-          icon = "skillAttack",
-          key = "attack",
-          mpCost = 0
-      },
-      {
-          name = "Defend",
-          description = "Enter defensive stance.",
-          details = "Increase defense to reduce incoming damage.",
-          type = "defensive",
-          icon = "skillDefend",
-          key = "defend",
-          mpCost = 0
-      },
-      {
-          name = "Special Attack",
-          description = "Powerful special attack with high damage.",
-          details = "Deal large physical damage but requires preparation.",
-          type = "offensive",
-          icon = "skillSpecial",
-          key = "special",
-          mpCost = 20
-      },
-      {
-          name = "Heal",
-          description = "Restore HP.",
-          details = "Heal yourself based on character attributes.",
-          type = "support",
-          icon = "skillHeal",
-          key = "heal",
-          mpCost = 15
-      }
-  }
-  print("[GAME] Skill info loaded")
   menuState = {
     options = {
-      {textKey = "menu_select_level", action = function() transitionGameState(gameState, "levelSelect") end, descriptionKey = "menu_select_level_desc"},
-      {textKey = "menu_options", action = function() transitionGameState(gameState, "options") end, descriptionKey = "menu_options_desc"},
-      {textKey = "menu_story_page", action = function() transitionGameState(gameState, "storyPage") end, descriptionKey = "menu_story_page_desc"},
-      {textKey = "menu_about", action = function() transitionGameState(gameState, "aboutPage") end, descriptionKey = "menu_about_desc"},
-      -- New Quest Log option:
-      {textKey = "menu_quest_log", action = function() transitionGameState(gameState, "questLogScreen") end, descriptionKey = "menu_quest_log_desc"},
-      -- New Statistics option:
-      {textKey = "menu_statistics", action = function() transitionGameState(gameState, "statsScreen") end, descriptionKey = "menu_statistics_desc"},
-      {textKey = "menu_save_game", action = function() saveGame() end, descriptionKey = "menu_save_game_desc"},
-      {textKey = "menu_load_game", action = function() loadGame() end, descriptionKey = "menu_load_game_desc"},
+      {textKey = "menu_select_level", action = function() GameHelpers.transitionGameState(gameState, "levelSelect") end, descriptionKey = "menu_select_level_desc"},
+      {textKey = "menu_options", action = function() GameHelpers.transitionGameState(gameState, "options") end, descriptionKey = "menu_options_desc"},
+      {textKey = "menu_story_page", action = function() GameHelpers.transitionGameState(gameState, "storyPage") end, descriptionKey = "menu_story_page_desc"},
+      {textKey = "menu_about", action = function() GameHelpers.transitionGameState(gameState, "aboutPage") end, descriptionKey = "menu_about_desc"},
+      {textKey = "menu_quest_log", action = function() GameHelpers.transitionGameState(gameState, "questLogScreen") end, descriptionKey = "menu_quest_log_desc"},
+      {textKey = "menu_statistics", action = function() GameHelpers.transitionGameState(gameState, "statsScreen") end, descriptionKey = "menu_statistics_desc"},
+      {textKey = "menu_save_game", action = function() GameHelpers.saveGame() end, descriptionKey = "menu_save_game_desc"},
+      {textKey = "menu_load_game", action = function() GameHelpers.loadGame() end, descriptionKey = "menu_load_game_desc"},
       {textKey = "menu_exit", action = function() love.event.quit() end, descriptionKey = "menu_exit_desc"}
     },
-    currentOption = 1,
-    navTimer = 0,
-    navDelay = 0.6,
-    buttonAreas = {},
+    currentOption = 1, navTimer = 0, navDelay = 0.6, buttonAreas = {},
     levelSelect = {
-        currentLevel = 1,
-        maxLevel = 10, -- Max regular levels
-        navTimer = 0,
-        navDelay = 0.6,
-        buttonAreas = {},
-        backButtonArea = {},
-        grindingLevelIds = {}, -- To be populated with keys from GameData.grindingLevels
-        selectedGrindingLevelKey = nil -- Stores the key if a grinding level is selected
+        currentLevel = 1, maxLevel = 10, navTimer = 0, navDelay = 0.6,
+        buttonAreas = {}, backButtonArea = {}, grindingLevelIds = {}, selectedGrindingLevelKey = nil
     }
   }
-  print("[GAME] Menu state initialized")
+
   optionsState = {
     options = {
       {textKey = "options_language", type = "language", currentOption = 1, languageOptions = {"en", "zh"}},
@@ -968,65 +218,92 @@ print("[GAME] Battle state initialized")
       {textKey = "options_sfx", type = "toggle", state = "isMutedSFX", targetState = audioState},
       {textKey = "options_cheat", type = "toggle", state = "isCheatMode", targetState = playerSettings},
       {textKey = "options_infinite_hp", type = "toggle", state = "isInfiniteHP", targetState = playerSettings},
-      {textKey = "options_back_to_menu", action = function() transitionGameState(gameState, "menu") end},
+      {textKey = "options_back_to_menu", action = function() GameHelpers.transitionGameState(gameState, "menu") end},
     },
-    currentOption = 1,
-    navTimer = 0,
-    navDelay = 0.6,
-    buttonAreas = {},
-    backButtonArea = {},
-    languageButtonAreas = {} ,
-    resolutionButtonAreas = {},
-    fontSizeButtonAreas = {}
+    currentOption = 1, navTimer = 0, navDelay = 0.6,
+    buttonAreas = {}, backButtonArea = {}, languageButtonAreas = {} ,
+    resolutionButtonAreas = {}, fontSizeButtonAreas = {}
   }
-  print("[GAME] Options state initialized")
-    storyPageState.storyText = GameData.getText(currentGameLanguage, "game_full_story")
-    aboutPageState.storyText = GameData.getText(currentGameLanguage, "about_project")
-    aboutPageState.staffText = GameData.getText(currentGameLanguage, "about_staff")
 
-  previousGameState = "menu"
-  uiMessage = ""
-  uiMessageTimer = 0
+  storyPageState = {
+    storyText = "", scrollPosition = 0, backButtonArea = {}, navDelay = 0.3,
+  }
 
-  resources.images.palace = resources.images.background
-  resources.images.forest = resources.images.background
-  resources.images.demonCastle = resources.images.background
-  resources.images.ruins = resources.images.background
-  local backgrounds = {'palace', 'forest', 'demonCastle', 'ruins'}
-  for _, bg in ipairs(backgrounds) do
-      local image = loadImage('assets/' .. bg .. '.png')
-      if image then
-          resources.images[bg] = image
-          print("[RESOURCE] Loaded background image: assets/" .. bg .. '.png')
+  aboutPageState = {
+    scrollPosition = 0, backButtonArea = {},
+  }
+
+  inventoryState = {
+    selectedSlot = 1, slotCols = 5, slotRows = 4,
+    slotWidth = 100, slotHeight = 80, slotPadding = 10, padding = 15,
+    gridStartX = 50, gridStartY = 100, detailsX = 0, detailsY = 100,
+    uiMessage = "", uiMessageTimer = 0,
+    currentFocus = "inventory", selectedEquipmentSlotKey = nil,
+    equipmentSlotOrder = {"weapon", "head", "chest", "legs", "accessory1", "accessory2"},
+    equipmentSlotDisplayAreas = {}, equipmentPanel = { x = 0, y = 0, width = 0, height = 0 }
+  }
+  inventoryState.slotRows = math.ceil(player.inventoryCapacity / inventoryState.slotCols)
+  inventoryState.detailsX = inventoryState.gridStartX + (inventoryState.slotWidth + inventoryState.slotPadding) * inventoryState.slotCols + 20
+
+  questLogState = {
+    currentTab = "active", selectedQuestId = nil,
+    activeQuestScrollOffset = 0, completedQuestScrollOffset = 0,
+    questsPerPage = 5, tabAreas = {}, questListArea = {}, detailsArea = {},
+    lineHeight = 0, padding = 10, selectedQuestIndex = 1,
+    navDelayTimer = 0, navDelay = 0.15
+  }
+
+  statsScreenState = {
+    padding = 20, lineHeight = 0, labelColumnWidth = 0, valueColumnX = 0
+  }
+
+  -- Expose global variables to GameLogic and GameHelpers (important for cross-file access)
+  -- This must happen AFTER all global tables are initialized.
+  GameLogic.setGlobals(
+      player, enemy, resources, animations, battleState, uiState, pauseState,
+      resultState, menuState, optionsState, storyPageState, aboutPageState,
+      inventoryState, questLogState, statsScreenState,
+      GAME_CONSTANTS, playerSettings, audioState,
+      screenWidth, screenHeight, availableResolutions, currentResolutionIndex,
+      uiMessage, uiMessageTimer
+  )
+  GameHelpers.setGlobals(
+      player, enemy, resources, animations, battleState, uiState, pauseState,
+      resultState, menuState, optionsState, storyPageState, aboutPageState,
+      inventoryState, questLogState, statsScreenState,
+      GAME_CONSTANTS, playerSettings, audioState,
+      screenWidth, screenHeight, availableResolutions, currentResolutionIndex,
+      uiMessage, uiMessageTimer,
+      GameLogic, GameData, currentGameLanguage, previousGameState
+  )
+
+  -- Now load all other resources (GameLogic.loadAllResources now uses the global references)
+  GameLogic.loadAllResources(resources, GameLogic.positions)
+  GameHelpers.initFonts() -- Initialize fonts after resources are loaded
+
+  -- Populate grinding levels
+  if GameData and GameData.grindingLevels then
+      for id, _ in pairs(GameData.grindingLevels) do
+          table.insert(menuState.levelSelect.grindingLevelIds, id)
       end
+      table.sort(menuState.levelSelect.grindingLevelIds)
   end
-  print("[GAME] Background images loaded")
-  print("[GAME] love.load() - Game loading complete")
+
+  -- Set initial story/about page text
+  storyPageState.storyText = GameData.getText(currentGameLanguage, "game_full_story")
+  aboutPageState.storyText = GameData.getText(currentGameLanguage, "about_project")
+  aboutPageState.staffText = GameData.getText(currentGameLanguage, "about_staff")
+
+  -- Final check for critical resources
   local criticalResources = {
-    resources.images.background,
-    resources.images.dialogBox,
-    resources.images.uiFrame,
-    resources.images.playerStand,
-    resources.images.playerAttack,
-    resources.images.battleBgForest,
-    resources.images.battleBgCave,
-    resources.images.battleBgDungeon,
-    resources.images.battleBgCastle,
-    resources.images.hitEffect,
-    resources.images.defendEffect,
-    resources.images.skillDefend,
-    resources.images.skillSpecial,
-    resources.images.skillHeal,
-    resources.images.skillAttack,
-    resources.images.cooldownOverlay,
-    resources.images.portraitHero,
-    resources.images.portraitKing,
-    resources.images.portraitPrincess,
-    resources.images.portraitDemonKing,
-    resources.images.enemyDemonKing,
-    resources.fonts.ui,
-    resources.fonts.battle,
-    resources.fonts.damage,
+    resources.images.background, resources.images.dialogBox, resources.images.uiFrame,
+    resources.images.playerStand, resources.images.playerAttack, resources.images.battleBgForest,
+    resources.images.battleBgCave, resources.images.battleBgDungeon, resources.images.battleBgCastle,
+    resources.images.hitEffect, resources.images.defendEffect, resources.images.skillDefend,
+    resources.images.skillSpecial, resources.images.skillHeal, resources.images.skillAttack,
+    resources.images.cooldownOverlay, resources.images.portraitHero, resources.images.portraitKing,
+    resources.images.portraitPrincess, resources.images.portraitDemonKing, resources.images.enemyDemonKing,
+    resources.fonts.ui, resources.fonts.battle, resources.fonts.damage,
   }
   local allCriticalResourcesLoaded = true
   for _, resource in ipairs(criticalResources) do
@@ -1043,127 +320,13 @@ print("[GAME] Battle state initialized")
     love.graphics.print("Critical resources failed to load.\nPlease check the console for details.", 100, 100)
     love.event.quit()
   end
-  loadingState = false
-  transitionGameState(nil, "menu")
 
-  -- Temporary population for testing -  (This should ideally be done more dynamically)
-  if GameData and GameData.grindingLevels then
-      for id, _ in pairs(GameData.grindingLevels) do
-          table.insert(menuState.levelSelect.grindingLevelIds, id)
-      end
-      -- Sort them if necessary for consistent order
-      table.sort(menuState.levelSelect.grindingLevelIds)
-  end
+  print("[GAME] love.load() - Game loading complete")
+  GameHelpers.transitionGameState(nil, "menu") -- Transition to main menu after loading
 end
-TimerSystem = {
-    timers = {},
-    nextId = 1
-}
 
-local TIMER_STATE = {
-    ACTIVE = "active",
-    PAUSED = "paused",
-    CANCELLED = "cancelled"
-}
-TIMER_GROUPS = {
-    BATTLE = "battle",
-    ANIMATION = "animation",
-    UI = "ui",
-    GLOBAL = "global"
-}
-
-function TimerSystem.create(duration, callback, group)
-    local id = TimerSystem.nextId
-    TimerSystem.nextId = TimerSystem.nextId + 1
-    TimerSystem.timers[id] = {
-        duration = duration,
-        remaining = duration,
-        callback = callback,
-        state = TIMER_STATE.ACTIVE,
-        group = group or TIMER_GROUPS.GLOBAL
-    }
-    return id
-end
-function TimerSystem.cancel(id)
-    local timer = TimerSystem.timers[id]
-    if timer then
-        timer.state = TIMER_STATE.CANCELLED
-    end
-end
-function TimerSystem.pause(id)
-    local timer = TimerSystem.timers[id]
-    if timer and timer.state == TIMER_STATE.ACTIVE then
-        timer.state = TIMER_STATE.PAUSED
-    end
-end
-function TimerSystem.resume(id)
-    local timer = TimerSystem.timers[id]
-    if timer and timer.state == TIMER_STATE.PAUSED then
-        timer.state = TIMER_STATE.ACTIVE
-    end
-end
-function TimerSystem.pauseGroup(group)
-    for id, timer in pairs(TimerSystem.timers) do
-        if timer.group == group and timer.state == TIMER_STATE.ACTIVE then
-            timer.state = TIMER_STATE.PAUSED
-        end
-    end
-end
-function TimerSystem.resumeGroup(group)
-    for id, timer in pairs(TimerSystem.timers) do
-        if timer.group == group and timer.state == TIMER_STATE.PAUSED then
-            timer.state = TIMER_STATE.ACTIVE
-        end
-    end
-end
-function TimerSystem.update(dt)
-    for id, timer in pairs(TimerSystem.timers) do
-        if timer.state == TIMER_STATE.ACTIVE then
-            timer.remaining = timer.remaining - dt
-            if timer.remaining <= 0 then
-                if timer.callback then
-                    timer.callback()
-                end
-                TimerSystem.timers[id] = nil
-            end
-        end
-    end
-end
-function addTimer(duration, callback, group)
-    return TimerSystem.create(duration, callback, group)
-end
-function updateTimers(dt)
-    TimerSystem.update(dt)
-end
-function startEnemyTurn()
-    local timerId = addTimer(GAME_CONSTANTS.TIMER.ACTION_DELAY, function()
-        if gameState == "battle" then
-            battleState.phase = "select"
-            battleState.turn = "player"
-        end
-    end, TIMER_GROUPS.BATTLE)
-    battleState.currentTimerId = timerId
-end
-function handleBattlePause()
-    if not pauseState.isPaused then
-        pauseState.isPaused = true
-        transitionGameState(gameState, "pause")
-        TimerSystem.pauseGroup(TIMER_GROUPS.BATTLE)
-        if not audioState.isMutedBGM then
-            love.audio.stop()
-            print("[AUDIO] Game paused, all audio stopped.")
-        end
-    end
-end
-function resumeBattle()
-    if pauseState.isPaused then
-        pauseState.isPaused = false
-        transitionGameState(gameState, "battle")
-        TimerSystem.resumeGroup(TIMER_GROUPS.BATTLE)
-    end
-end
 function love.update(dt)
-    updateTimers(dt)
+    GameLogic.TimerSystem.update(dt)
 
     if uiMessageTimer > 0 then
         uiMessageTimer = uiMessageTimer - dt
@@ -1173,1650 +336,89 @@ function love.update(dt)
     end
 
     if gameState == "menu" then
-        handleMenuInput(dt)
+        GameLogic.handleMenuInput(dt, menuState, GameData, currentGameLanguage)
     elseif gameState == "levelSelect" then
-        handleLevelSelectInput(dt)
+        GameLogic.handleLevelSelectInput(dt, menuState)
     elseif gameState == "story" then
         GameData.updateTextEffect(dt)
-        handleStoryInput(dt)
+        -- Story input handled in love.keypressed for now
     elseif gameState == "battle" then
-        updateAnimations(dt)
-        updateEffects(dt)
+        GameLogic.updateAnimations(dt, animations, GameLogic.positions)
+        GameLogic.updateEffects(dt, battleState)
         if battleState.messageTimer > 0 then
             battleState.messageTimer = battleState.messageTimer - dt
         end
-        if enemy.hp <= 0 then
-            if not battleState.victoryTriggered then -- Add a flag to prevent multiple triggers
-                grantExp(enemy.expReward or 0) -- Use enemy.expReward, ensure it's populated in restartGame
-                battleState.victoryTriggered = true -- Set flag
-
-                if currentState.isGrinding then
-                    -- Continuous spawning for grinding mode
-                    battleState.message = GameData.getText(currentGameLanguage, "grinding_next_opponent", nil, "Next opponent incoming!") -- Placeholder, add to game_data
-                    battleState.messageTimer = GAME_CONSTANTS.TIMER.ACTION_DELAY
-
-                    TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY + 0.5, function()
-                        if gameState == "battle" and currentState.isGrinding then -- Ensure still in grinding battle
-                            battleState.victoryTriggered = false -- Reset for next enemy
-                            restartGame()
-                            -- Player HP/MP are reset in restartGame() via player settings if desired, or keep current
-                            print("[GRINDING] Spawning next enemy.")
-                        end
-                    end, TIMER_GROUPS.BATTLE)
-                else
-                    -- Regular victory
-                    battleState.phase = "result" -- Keep this for regular mode
-                    TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY + (battleState.messageTimer > 0 and battleState.messageTimer or 0), function()
-                        if gameState == "battle" then -- Check if still in battle before transitioning
-                             transitionGameState(gameState, "victory")
-                        end
-                    end, TIMER_GROUPS.BATTLE)
-                end
-            end
-        elseif player.hp <= 0 then
-            if not battleState.defeatTriggered then -- Add a flag
-                battleState.defeatTriggered = true
-                battleState.phase = "result"
-                TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY + (battleState.messageTimer > 0 and battleState.messageTimer or 0), function()
-                    if gameState == "battle" then -- Check if still in battle
-                        if currentState.isGrinding then
-                            -- Optional: Handle defeat in grinding differently? For now, same as regular.
-                            -- Player can leave from defeat screen or restart (which would restart grinding if isGrinding is still true)
-                            -- currentState.isGrinding = false; -- Or keep it true if defeat screen has grinding-aware options
-                        end
-                        transitionGameState(gameState, "defeat")
-                    end
-                end, TIMER_GROUPS.BATTLE)
-            end
-        end
+        GameLogic.checkBattleEnd(player, enemy, battleState, GameData.story.currentState, GAME_CONSTANTS, GameLogic.TimerSystem, GameHelpers.transitionGameState, GameHelpers.restartGame, GameData, currentGameLanguage)
     elseif gameState == "pause" then
+        -- No continuous update needed for pause menu
     elseif gameState == "ending" then
+        -- No continuous update needed for ending
     elseif gameState == "options" then
-        handleOptionsInput(dt)
+        GameLogic.handleOptionsInput(dt, optionsState, GameData, currentGameLanguage, GameHelpers.applyResolutionChange, GameHelpers.applyFontSizeChange, availableResolutions, GAME_CONSTANTS, playerSettings, audioState, currentResolutionIndex)
     elseif gameState == "storyPage" then
-        handleStoryPageInput(dt)
+        GameLogic.handleStoryPageInput(dt, storyPageState)
     elseif gameState == "aboutPage" then
-        handleAboutPageInput(dt)
+        GameLogic.handleAboutPageInput(dt, aboutPageState)
     elseif gameState == "inventoryScreen" then
-        -- uiMessageTimer is handled globally now
+        -- uiMessageTimer is handled globally
     elseif gameState == "questLogScreen" then
-        handleQuestLogInput(dt)
+        GameLogic.handleQuestLogInput(dt, questLogState, player, GameData, currentGameLanguage)
     elseif gameState == "statsScreen" then
-        handleStatsScreenInput(dt)
+        -- No continuous update needed for stats screen
     end
-end
-
-function drawQuestLogScreen()
-    local windowWidth = love.graphics.getWidth()
-    local windowHeight = love.graphics.getHeight()
-    love.graphics.clear(0.1, 0.1, 0.15, 1) -- Dark background
-
-    local uiFont = resources.fonts.ui or love.graphics.newFont(16)
-    local titleFont = resources.fonts.battle or love.graphics.newFont(24)
-    questLogState.lineHeight = uiFont:getHeight() + 4 -- Add some padding
-
-    -- Title
-    love.graphics.setFont(titleFont)
-    love.graphics.setColor(1, 1, 1)
-    local titleText = GameData.getText(currentGameLanguage, "menu_quest_log") -- Re-use menu title
-    love.graphics.printf(titleText, 0, questLogState.padding, windowWidth, "center")
-
-    -- Tabs
-    love.graphics.setFont(uiFont)
-    local tabY = questLogState.padding * 2 + titleFont:getHeight()
-    local tabHeight = questLogState.lineHeight + questLogState.padding
-    local activeTabText = GameData.getText(currentGameLanguage, "quest_log_active", nil, "Active")
-    local completedTabText = GameData.getText(currentGameLanguage, "quest_log_completed", nil, "Completed")
-
-    local activeTabWidth = uiFont:getWidth(activeTabText) + questLogState.padding * 2
-    local completedTabWidth = uiFont:getWidth(completedTabText) + questLogState.padding * 2
-
-    questLogState.tabAreas.active = { x = questLogState.padding, y = tabY, width = activeTabWidth, height = tabHeight }
-    questLogState.tabAreas.completed = { x = questLogState.padding + activeTabWidth + questLogState.padding, y = tabY, width = completedTabWidth, height = tabHeight }
-
-    -- Draw Active Tab
-    if questLogState.currentTab == "active" then
-        love.graphics.setColor(0.4, 0.4, 0.5) -- Highlight active tab
-    else
-        love.graphics.setColor(0.2, 0.2, 0.3)
-    end
-    love.graphics.rectangle("fill", questLogState.tabAreas.active.x, questLogState.tabAreas.active.y, questLogState.tabAreas.active.width, questLogState.tabAreas.active.height)
-    love.graphics.setColor(1,1,1)
-    love.graphics.printf(activeTabText, questLogState.tabAreas.active.x + questLogState.padding, tabY + questLogState.padding / 2, activeTabWidth - questLogState.padding * 2, "center")
-
-    -- Draw Completed Tab
-    if questLogState.currentTab == "completed" then
-        love.graphics.setColor(0.4, 0.4, 0.5) -- Highlight active tab
-    else
-        love.graphics.setColor(0.2, 0.2, 0.3)
-    end
-    love.graphics.rectangle("fill", questLogState.tabAreas.completed.x, questLogState.tabAreas.completed.y, questLogState.tabAreas.completed.width, questLogState.tabAreas.completed.height)
-    love.graphics.setColor(1,1,1)
-    love.graphics.printf(completedTabText, questLogState.tabAreas.completed.x + questLogState.padding, tabY + questLogState.padding/2, completedTabWidth - questLogState.padding*2, "center")
-
-    -- Quest List Area
-    local listX = questLogState.padding
-    local listY = tabY + tabHeight + questLogState.padding
-    local listWidth = windowWidth * 0.4 - questLogState.padding * 1.5 -- Give some space between list and details
-    local listHeight = windowHeight - listY - questLogState.padding
-    questLogState.questListArea = {x = listX, y = listY, width = listWidth, height = listHeight}
-    love.graphics.setColor(0.2, 0.2, 0.25)
-    love.graphics.rectangle("fill", listX, listY, listWidth, listHeight)
-    love.graphics.setColor(1,1,1)
-
-    local questsToDisplay = {}
-    local currentScrollOffset = 0
-    if questLogState.currentTab == "active" then
-        if player.activeQuests then
-            for id, data in pairs(player.activeQuests) do
-                table.insert(questsToDisplay, {id = id, data = data})
-            end
-        end
-        currentScrollOffset = questLogState.activeQuestScrollOffset
-    else -- "completed"
-        if player.completedQuests then
-            for id, _ in pairs(player.completedQuests) do -- Assuming completedQuests stores IDs as keys
-                 table.insert(questsToDisplay, {id = id, data = GameData.quests[id]}) -- Fetch static data for completed
-            end
-        end
-        currentScrollOffset = questLogState.completedQuestScrollOffset
-    end
-
-    -- Sort quests by ID for consistent order (optional, but good for UI)
-    table.sort(questsToDisplay, function(a,b) return a.id < b.id end)
-
-    love.graphics.setScissor(listX, listY, listWidth, listHeight)
-    for i, questEntry in ipairs(questsToDisplay) do
-        if i > currentScrollOffset and i <= currentScrollOffset + questLogState.questsPerPage then
-            local questDef = GameData.quests[questEntry.id]
-            if questDef then
-                local questName = GameData.getText(currentGameLanguage, questDef.title_key, nil, questEntry.id)
-                local itemY = listY + (i - 1 - currentScrollOffset) * questLogState.lineHeight + questLogState.padding
-
-                if questEntry.id == questLogState.selectedQuestId then
-                    love.graphics.setColor(0.5, 0.5, 0.3) -- Highlight selected
-                    love.graphics.rectangle("fill", listX, itemY - questLogState.padding/2, listWidth, questLogState.lineHeight)
-                    love.graphics.setColor(1,1,0)
-                else
-                    love.graphics.setColor(1,1,1)
-                end
-                love.graphics.print(questName, listX + questLogState.padding, itemY)
-            end
-        end
-    end
-    love.graphics.setScissor()
-    love.graphics.setColor(1,1,1)
-
-
-    -- Quest Details Area
-    local detailsX = listX + listWidth + questLogState.padding
-    local detailsY = listY
-    local detailsWidth = windowWidth - detailsX - questLogState.padding
-    local detailsHeight = listHeight
-    questLogState.detailsArea = {x = detailsX, y = detailsY, width = detailsWidth, height = detailsHeight}
-    love.graphics.setColor(0.25, 0.25, 0.2)
-    love.graphics.rectangle("fill", detailsX, detailsY, detailsWidth, detailsHeight)
-    love.graphics.setColor(1,1,1)
-
-    love.graphics.setScissor(detailsX, detailsY, detailsWidth, detailsHeight)
-    if questLogState.selectedQuestId and GameData.quests[questLogState.selectedQuestId] then
-        local questDef = GameData.quests[questLogState.selectedQuestId]
-        local currentY = detailsY + questLogState.padding
-
-        -- Title
-        love.graphics.setFont(titleFont) -- Use larger font for title
-        local selectedTitle = GameData.getText(currentGameLanguage, questDef.title_key, nil, questLogState.selectedQuestId)
-        love.graphics.printf(selectedTitle, detailsX + questLogState.padding, currentY, detailsWidth - questLogState.padding*2, "left")
-        currentY = currentY + titleFont:getHeight() + questLogState.padding * 2
-        love.graphics.setFont(uiFont) -- Switch back to UI font
-
-        -- Description
-        local description = GameData.getText(currentGameLanguage, questDef.description_key, nil, "No description.")
-        love.graphics.printf(description, detailsX + questLogState.padding, currentY, detailsWidth - questLogState.padding*2, "left")
-        currentY = currentY + uiFont:getHeight(description, detailsWidth - questLogState.padding*2) + questLogState.lineHeight
-
-        -- Objectives
-        love.graphics.setColor(0.8, 0.9, 1)
-        love.graphics.print(GameData.getText(currentGameLanguage, "quest_log_objectives", nil, "Objectives:"), detailsX + questLogState.padding, currentY)
-        currentY = currentY + questLogState.lineHeight
-        love.graphics.setColor(1,1,1)
-
-        if questDef.objectives then
-            for i, obj in ipairs(questDef.objectives) do
-                local progressText = ""
-                if questLogState.currentTab == "active" and player.activeQuests[questLogState.selectedQuestId] and player.activeQuests[questLogState.selectedQuestId].objectives[i] then
-                    local currentProgress = player.activeQuests[questLogState.selectedQuestId].objectives[i].currentProgress or 0
-                    progressText = string.format(" (%d/%d)", currentProgress, obj.requiredCount)
-                elseif questLogState.currentTab == "completed" then
-                    progressText = string.format(" (%d/%d)", obj.requiredCount, obj.requiredCount) -- Show as completed
-                end
-
-                local objectiveText = ""
-                if obj.type == "kill" then
-                    local enemyName = GameData.getText(currentGameLanguage, obj.target_key, nil, obj.target_key)
-                    objectiveText = GameData.getText(currentGameLanguage, "quest_log_obj_kill", {target=enemyName, count=obj.requiredCount}, "- Kill %{count} %{target}") .. progressText
-                elseif obj.type == "collect" then
-                    local itemName = GameData.getText(currentGameLanguage, GameData.items[obj.item_id].name_key, nil, obj.item_id)
-                    objectiveText = GameData.getText(currentGameLanguage, "quest_log_obj_collect", {item=itemName, count=obj.requiredCount}, "- Collect %{count} %{item}") .. progressText
-                else
-                    objectiveText = "- Unknown objective type" .. progressText
-                end
-                love.graphics.printf(objectiveText, detailsX + questLogState.padding * 2, currentY, detailsWidth - questLogState.padding*3, "left")
-                currentY = currentY + uiFont:getHeight(objectiveText, detailsWidth - questLogState.padding*3) + questLogState.padding / 2
-            end
-        end
-        currentY = currentY + questLogState.lineHeight
-
-        -- Rewards
-        love.graphics.setColor(1, 0.9, 0.8)
-        love.graphics.print(GameData.getText(currentGameLanguage, "quest_log_rewards", nil, "Rewards:"), detailsX + questLogState.padding, currentY)
-        currentY = currentY + questLogState.lineHeight
-        love.graphics.setColor(1,1,1)
-
-        if questDef.rewards then
-            if questDef.rewards.exp then
-                love.graphics.print(GameData.getText(currentGameLanguage, "quest_log_reward_exp", {exp = questDef.rewards.exp}, "- %{exp} EXP"), detailsX + questLogState.padding * 2, currentY)
-                currentY = currentY + questLogState.lineHeight
-            end
-            if questDef.rewards.gold then
-                 love.graphics.print(GameData.getText(currentGameLanguage, "quest_log_reward_gold", {gold = questDef.rewards.gold}, "- %{gold} Gold"), detailsX + questLogState.padding * 2, currentY)
-                currentY = currentY + questLogState.lineHeight
-            end
-            if questDef.rewards.items then
-                for _, itemReward in ipairs(questDef.rewards.items) do
-                    local itemName = GameData.getText(currentGameLanguage, GameData.items[itemReward.itemId].name_key, nil, itemReward.itemId)
-                    local itemText = GameData.getText(currentGameLanguage, "quest_log_reward_item", {item=itemName, quantity=itemReward.quantity}, "- %{quantity}x %{item}")
-                    love.graphics.print(itemText, detailsX + questLogState.padding * 2, currentY)
-                    currentY = currentY + questLogState.lineHeight
-                end
-            end
-        end
-
-    else
-        love.graphics.printf(GameData.getText(currentGameLanguage, "quest_log_no_quest_selected", nil, "Select a quest to see details."), detailsX + questLogState.padding, detailsY + questLogState.padding, detailsWidth - questLogState.padding*2, "center")
-    end
-    love.graphics.setScissor()
-
-
-    -- Instructions
-    love.graphics.setFont(uiFont)
-    love.graphics.setColor(0.8, 0.8, 0.8)
-    local instructions = GameData.getText(currentGameLanguage, "quest_log_instructions", nil, "Up/Down: Select Quest | Left/Right: Change Tab | ESC: Back")
-    love.graphics.printf(instructions, 0, windowHeight - questLogState.lineHeight, windowWidth, "center")
-end
-
-function handleQuestLogInput(dt)
-    questLogState.navDelayTimer = questLogState.navDelayTimer + dt
-    if questLogState.navDelayTimer < questLogState.navDelay then
-        return -- Not enough time passed for next input
-    end
-
-    local inputProcessed = false
-    local currentQuestsArray = {}
-    local currentScrollOffset = 0
-    local isCompletedTab = questLogState.currentTab == "completed"
-
-    if questLogState.currentTab == "active" then
-        if player.activeQuests then
-            for id, data in pairs(player.activeQuests) do
-                table.insert(currentQuestsArray, {id = id, data = data})
-            end
-        end
-        currentScrollOffset = questLogState.activeQuestScrollOffset
-    else -- "completed"
-        if player.completedQuests then
-            for id, _ in pairs(player.completedQuests) do
-                table.insert(currentQuestsArray, {id = id, data = GameData.quests[id]})
-            end
-        end
-        currentScrollOffset = questLogState.completedQuestScrollOffset
-    end
-    table.sort(currentQuestsArray, function(a,b) return a.id < b.id end)
-
-    local totalQuestsInCurrentTab = #currentQuestsArray
-
-    if love.keyboard.isDown("up") or love.keyboard.isDown("w") then
-        if totalQuestsInCurrentTab > 0 then
-            questLogState.selectedQuestIndex = questLogState.selectedQuestIndex - 1
-            if questLogState.selectedQuestIndex < 1 then
-                questLogState.selectedQuestIndex = totalQuestsInCurrentTab -- Wrap to bottom
-                if isCompletedTab then
-                    questLogState.completedQuestScrollOffset = math.max(0, totalQuestsInCurrentTab - questLogState.questsPerPage)
-                else
-                    questLogState.activeQuestScrollOffset = math.max(0, totalQuestsInCurrentTab - questLogState.questsPerPage)
-                end
-            end
-            -- Scrolling up
-            if questLogState.selectedQuestIndex <= currentScrollOffset then
-                if isCompletedTab then
-                    questLogState.completedQuestScrollOffset = math.max(0, questLogState.selectedQuestIndex - 1)
-                else
-                    questLogState.activeQuestScrollOffset = math.max(0, questLogState.selectedQuestIndex - 1)
-                end
-            end
-            inputProcessed = true
-        end
-    elseif love.keyboard.isDown("down") or love.keyboard.isDown("s") then
-        if totalQuestsInCurrentTab > 0 then
-            questLogState.selectedQuestIndex = questLogState.selectedQuestIndex + 1
-            if questLogState.selectedQuestIndex > totalQuestsInCurrentTab then
-                questLogState.selectedQuestIndex = 1 -- Wrap to top
-                if isCompletedTab then
-                    questLogState.completedQuestScrollOffset = 0
-                else
-                    questLogState.activeQuestScrollOffset = 0
-                end
-            end
-            -- Scrolling down
-            if questLogState.selectedQuestIndex > currentScrollOffset + questLogState.questsPerPage then
-                 if isCompletedTab then
-                    questLogState.completedQuestScrollOffset = questLogState.selectedQuestIndex - questLogState.questsPerPage
-                else
-                    questLogState.activeQuestScrollOffset = questLogState.selectedQuestIndex - questLogState.questsPerPage
-                end
-            end
-            inputProcessed = true
-        end
-    elseif love.keyboard.isDown("left") or love.keyboard.isDown("a") then
-        if questLogState.currentTab == "completed" then
-            questLogState.currentTab = "active"
-            questLogState.selectedQuestIndex = 1
-            questLogState.activeQuestScrollOffset = 0
-            inputProcessed = true
-        end
-    elseif love.keyboard.isDown("right") or love.keyboard.isDown("d") then
-        if questLogState.currentTab == "active" then
-            questLogState.currentTab = "completed"
-            questLogState.selectedQuestIndex = 1
-            questLogState.completedQuestScrollOffset = 0
-            inputProcessed = true
-        end
-    end
-
-    if inputProcessed then
-        questLogState.navDelayTimer = 0 -- Reset timer
-        if totalQuestsInCurrentTab > 0 and questLogState.selectedQuestIndex >= 1 and questLogState.selectedQuestIndex <= totalQuestsInCurrentTab then
-             questLogState.selectedQuestId = currentQuestsArray[questLogState.selectedQuestIndex].id
-        elseif totalQuestsInCurrentTab == 0 then
-             questLogState.selectedQuestId = nil -- No quests to select
-             questLogState.selectedQuestIndex = 1 -- Reset index
-        else -- Index out of bounds, reset (should ideally not happen with wrapping)
-             questLogState.selectedQuestId = nil
-             questLogState.selectedQuestIndex = 1
-             if isCompletedTab then questLogState.completedQuestScrollOffset = 0 else questLogState.activeQuestScrollOffset = 0 end
-        end
-    end
-end
-
-function drawStatsScreen()
-    local windowWidth = love.graphics.getWidth()
-    local windowHeight = love.graphics.getHeight()
-    love.graphics.clear(0.15, 0.15, 0.1, 1) -- Dark green-ish background
-
-    local uiFont = resources.fonts.ui or love.graphics.newFont(18) -- Ensure a decent size
-    local titleFont = resources.fonts.battle or love.graphics.newFont(28)
-
-    statsScreenState.lineHeight = uiFont:getHeight() + 8 -- Add some padding
-    local currentY = statsScreenState.padding
-
-    -- Title
-    love.graphics.setFont(titleFont)
-    love.graphics.setColor(1, 1, 1)
-    local titleText = GameData.getText(currentGameLanguage, "stats_screen_title", nil, "Player Statistics")
-    love.graphics.printf(titleText, 0, currentY, windowWidth, "center")
-    currentY = currentY + titleFont:getHeight() + statsScreenState.padding * 2
-
-    -- Stats Display
-    love.graphics.setFont(uiFont)
-
-    local statsToDisplay = {
-        {label_key = "stat_label_level", value = player.level},
-        {label_key = "stat_label_exp", value_format = "%s / %s", value = player.exp, value2 = player.expToNextLevel},
-        {label_key = "stat_label_hp", value_format = "%s / %s", value = player.hp, value2 = player.maxHp},
-        {label_key = "stat_label_mp", value_format = "%s / %s", value = player.mp, value2 = player.maxMp},
-        {label_key = "stat_label_attack", value = player.attack},
-        {label_key = "stat_label_defense", value = player.defense},
-        {label_key = "stat_label_crit_rate", value_format = "%s%%", value = player.critRate},
-        {label_key = "stat_label_crit_damage", value_format = "%sx", value = player.critDamage}
-    }
-
-    -- Determine max label width for alignment (simple version)
-    local maxLabelWidth = 0
-    for _, statItem in ipairs(statsToDisplay) do
-        local labelText = GameData.getText(currentGameLanguage, statItem.label_key, nil, statItem.label_key) .. ":"
-        if uiFont:getWidth(labelText) > maxLabelWidth then
-            maxLabelWidth = uiFont:getWidth(labelText)
-        end
-    end
-    statsScreenState.labelColumnWidth = maxLabelWidth + statsScreenState.padding
-    statsScreenState.valueColumnX = statsScreenState.padding + statsScreenState.labelColumnWidth
-
-    -- Draw each statistic
-    for _, statItem in ipairs(statsToDisplay) do
-        love.graphics.setColor(0.8, 0.8, 1) -- Label color
-        local labelText = GameData.getText(currentGameLanguage, statItem.label_key, nil, statItem.label_key) .. ":"
-        love.graphics.print(labelText, statsScreenState.padding + (statsScreenState.labelColumnWidth - uiFont:getWidth(labelText) - statsScreenState.padding), currentY) -- Right align labels
-
-        love.graphics.setColor(1, 1, 1) -- Value color
-        local valueString
-        if statItem.value_format then
-            if statItem.value2 then
-                valueString = string.format(statItem.value_format, tostring(statItem.value), tostring(statItem.value2))
-            else
-                valueString = string.format(statItem.value_format, tostring(statItem.value))
-            end
-        else
-            valueString = tostring(statItem.value)
-        end
-        love.graphics.print(valueString, statsScreenState.valueColumnX, currentY)
-
-        currentY = currentY + statsScreenState.lineHeight
-    end
-
-    -- Instructions
-    love.graphics.setColor(0.8, 0.8, 0.8)
-    local instructions = GameData.getText(currentGameLanguage, "stats_screen_instructions", nil, "Press ESC to go back")
-    love.graphics.printf(instructions, 0, windowHeight - statsScreenState.lineHeight - statsScreenState.padding, windowWidth, "center")
-end
-
-function handleStatsScreenInput(dt)
-    -- Placeholder: Will be implemented if complex input is needed later
-    -- For now, Esc is handled in love.keypressed
 end
 
 function love.draw()
-  if loadingState then
-    drawLoadingScreen()
+  if gameState == "loading" then
+    GameHelpers.drawLoadingScreen(loadingFont, creatorLogo, engineLogo, gameGroupLogo)
     return
   end
+
   love.graphics.push()
-  love.graphics.scale(camera.scale, camera.scale)
-  love.graphics.translate(-camera.x, -camera.y)
+  -- Camera is not used in this game, so scale/translate are not needed
+  -- love.graphics.scale(camera.scale, camera.scale)
+  -- love.graphics.translate(-camera.x, -camera.y)
+
   if gameState == "menu" then
-    drawMainMenu()
+    GameHelpers.drawMainMenu(resources, menuState, GameData, currentGameLanguage, GAME_CONSTANTS)
   elseif gameState == "levelSelect" then
-    drawLevelSelect()
+    GameHelpers.drawLevelSelect(resources, menuState, GameData, currentGameLanguage)
   elseif gameState == "story" then
-    drawStoryDialogue()
+    GameHelpers.drawStoryDialogue(resources, GameData, currentGameLanguage, GameLogic.enemyData, GameData.story.currentState)
   elseif gameState == "battle" then
-    drawBattleScene()
-    drawCharacters()
-    drawBattleUI()
-    drawEffects()
-    drawBattleMessage()
+    GameLogic.drawBattleScene(resources, GameData.story.currentState, GameLogic.battleBackgrounds)
+    GameLogic.drawCharacters(animations, resources, GameLogic.positions, enemy)
+    GameHelpers.drawBattleUI(resources, player, enemy, battleState, uiState, GameData, currentGameLanguage, GAME_CONSTANTS, GameLogic.skillInfo, GameLogic.skillSystem)
+    GameLogic.drawEffects(battleState)
+    GameHelpers.drawBattleMessage(battleState, player, enemy, GameData, currentGameLanguage)
     if uiState.showSkillInfo then
-      drawSkillInfoUI()
+      GameHelpers.drawSkillInfoUI(uiState, GameLogic.skillInfo, GameData, currentGameLanguage, resources)
     end
   elseif gameState == "pause" then
-    drawBattleScene()
-    drawCharacters()
-    drawBattleUI()
-    drawPauseUI()
+    GameLogic.drawBattleScene(resources, GameData.story.currentState, GameLogic.battleBackgrounds)
+    GameLogic.drawCharacters(animations, resources, GameLogic.positions, enemy)
+    GameHelpers.drawBattleUI(resources, player, enemy, battleState, uiState, GameData, currentGameLanguage, GAME_CONSTANTS, GameLogic.skillInfo, GameLogic.skillSystem)
+    GameHelpers.drawPauseUI(pauseState, GameData, currentGameLanguage, resources)
   elseif gameState == "victory" then
-    drawVictoryUI()
+    GameHelpers.drawVictoryUI(resultState, GameData, currentGameLanguage, resources)
   elseif gameState == "defeat" then
-    drawDefeatUI()
+    GameHelpers.drawDefeatUI(resultState, GameData, currentGameLanguage, resources)
   elseif gameState == "options" then
-    drawOptionsUI()
+    GameHelpers.drawOptionsUI(optionsState, GameData, currentGameLanguage, resources, availableResolutions, GAME_CONSTANTS, playerSettings, audioState)
   elseif gameState == "storyPage" then
-    drawStoryPageUI()
+    GameHelpers.drawStoryPageUI(storyPageState, GameData, currentGameLanguage, resources)
   elseif gameState == "aboutPage" then
-    drawAboutPageUI()
+    GameHelpers.drawAboutPageUI(aboutPageState, GameData, currentGameLanguage, resources)
   elseif gameState == "inventoryScreen" then
-    drawInventoryScreen()
+    GameHelpers.drawInventoryScreen(inventoryState, player, GameData, currentGameLanguage, resources, uiMessage, uiMessageTimer)
   elseif gameState == "questLogScreen" then
-    drawQuestLogScreen()
+    GameHelpers.drawQuestLogScreen(questLogState, player, GameData, currentGameLanguage, resources)
   elseif gameState == "statsScreen" then
-    drawStatsScreen()
+    GameHelpers.drawStatsScreen(statsScreenState, player, GameData, currentGameLanguage, resources)
   end
   love.graphics.pop()
 end
 
-function drawInventoryScreen()
-    local windowWidth = love.graphics.getWidth()
-    local windowHeight = love.graphics.getHeight()
-    love.graphics.clear(0.1, 0.1, 0.1, 1)
-
-    local titleFont = resources.fonts.battle or resources.fonts.ui
-    local itemFont = resources.fonts.ui
-    local descFont = resources.fonts.ui
-
-    love.graphics.setFont(titleFont)
-    love.graphics.setColor(1, 1, 1)
-    love.graphics.printf("Inventory", 0, 20, windowWidth, "center")
-
-    love.graphics.setFont(itemFont)
-    for i = 1, player.inventoryCapacity do
-        local row = math.floor((i - 1) / inventoryState.slotCols)
-        local col = (i - 1) % inventoryState.slotCols
-        local x = inventoryState.gridStartX + col * (inventoryState.slotWidth + inventoryState.slotPadding)
-        local y = inventoryState.gridStartY + row * (inventoryState.slotHeight + inventoryState.slotPadding)
-
-        if i == inventoryState.selectedSlot then
-            love.graphics.setColor(1, 1, 0, 0.5)
-            love.graphics.rectangle("fill", x, y, inventoryState.slotWidth, inventoryState.slotHeight)
-            love.graphics.setColor(1, 1, 0)
-        else
-            love.graphics.setColor(0.3, 0.3, 0.3)
-        end
-        love.graphics.rectangle("line", x, y, inventoryState.slotWidth, inventoryState.slotHeight)
-
-        love.graphics.setColor(1,1,1)
-        local item = player.inventory[i]
-        if item then
-            local itemData = GameData.story.items[item.itemId]
-            if itemData then
-                local itemName = GameData.getText(currentGameLanguage, itemData.name_key, nil, item.itemId)
-                love.graphics.printf(itemName, x + 5, y + 5, inventoryState.slotWidth - 10, "left")
-                if itemData.stackable then
-                    love.graphics.printf("x" .. item.quantity, x + 5, y + inventoryState.slotHeight - 25, inventoryState.slotWidth - 10, "right")
-                end
-            else
-                 love.graphics.printf("Unknown", x + 5, y + 5, inventoryState.slotWidth - 10, "left")
-            end
-        end
-    end
-
-    local selectedItem = player.inventory[inventoryState.selectedSlot]
-    if selectedItem then
-        local itemData = GameData.story.items[selectedItem.itemId]
-        if itemData then
-            love.graphics.setFont(itemFont)
-            love.graphics.setColor(1,1,1)
-            love.graphics.printf(GameData.getText(currentGameLanguage, itemData.name_key), inventoryState.detailsX, inventoryState.detailsY, windowWidth - inventoryState.detailsX - 20, "left")
-
-            love.graphics.setFont(descFont)
-            love.graphics.setColor(0.8, 0.8, 0.8)
-            love.graphics.printf(GameData.getText(currentGameLanguage, itemData.description_key), inventoryState.detailsX, inventoryState.detailsY + 30, windowWidth - inventoryState.detailsX - 20, "left")
-
-            if itemData.type == "consumable" then
-                love.graphics.setFont(itemFont)
-                love.graphics.setColor(0.7, 1, 0.7)
-                love.graphics.printf("Press Enter to Use", inventoryState.detailsX, inventoryState.detailsY + 80, windowWidth - inventoryState.detailsX - 20, "left")
-            end
-        end
-    end
-
-    if uiMessage and uiMessageTimer > 0 then
-        love.graphics.setFont(itemFont)
-        love.graphics.setColor(1,1,0) -- Yellow for UI messages
-        local msgWidth = itemFont:getWidth(uiMessage)
-        love.graphics.printf(uiMessage, windowWidth / 2 - msgWidth / 2, windowHeight - 70, windowWidth, "center")
-    end
-
-    love.graphics.setFont(itemFont)
-    love.graphics.setColor(0.8,0.8,0.8)
-    -- love.graphics.printf("Use Arrow Keys to Navigate, I to Close, Enter to Use", inventoryState.gridStartX, windowHeight - 40, windowWidth - inventoryState.gridStartX*2, "center")
-
-    -- Equipment Panel Drawing
-    local eqPanelX = inventoryState.detailsX;
-    local eqPanelY = inventoryState.detailsY + 120; -- Position below item details area, adjust as needed
-    local eqPanelWidth = windowWidth - eqPanelX - inventoryState.padding - 20;  -- Align with details area width
-    local eqSlotHeight = (itemFont:getHeight() + 4) * 2;
-    local eqPanelHeight = (#inventoryState.equipmentSlotOrder * eqSlotHeight) + inventoryState.padding * 3 + itemFont:getHeight();
-
-    inventoryState.equipmentPanel = {x = eqPanelX, y = eqPanelY, width = eqPanelWidth, height = eqPanelHeight};
-
-    love.graphics.setColor(0.12, 0.12, 0.18) -- Slightly different background for equipment panel
-    love.graphics.rectangle("fill", eqPanelX, eqPanelY, eqPanelWidth, eqPanelHeight)
-    love.graphics.setColor(1,1,1)
-    love.graphics.rectangle("line", eqPanelX, eqPanelY, eqPanelWidth, eqPanelHeight)
-    love.graphics.setFont(titleFont) -- Use a slightly larger font for the panel title
-    love.graphics.printf(GameData.getText(currentGameLanguage, "inventory_equipped_title", nil, "Equipped"), eqPanelX, eqPanelY + inventoryState.padding / 2, eqPanelWidth, "center")
-    love.graphics.setFont(itemFont) -- Switch back to itemFont for slots
-
-    local currentEqY = eqPanelY + titleFont:getHeight() + inventoryState.padding;
-    inventoryState.equipmentSlotDisplayAreas = {}
-
-    for i, slotKey in ipairs(inventoryState.equipmentSlotOrder) do
-        local slotDisplayName = GameData.getText(currentGameLanguage, "equip_slot_" .. slotKey, nil, slotKey:gsub("^%l", string.upper))
-        local itemInSlotId = player.equipment[slotKey]
-        local itemDisplayName = GameData.getText(currentGameLanguage, "equip_slot_empty", nil, "Empty")
-        if itemInSlotId then
-            local itemData = GameData.items[itemInSlotId]
-            if itemData then
-                itemDisplayName = GameData.getText(currentGameLanguage, itemData.name_key, nil, itemInSlotId)
-            else
-                itemDisplayName = "Unknown Item" -- Should not happen
-            end
-        end
-
-        local displayArea = {x = eqPanelX + inventoryState.padding, y = currentEqY, width = eqPanelWidth - inventoryState.padding*2, height = eqSlotHeight - 4}
-        inventoryState.equipmentSlotDisplayAreas[slotKey] = displayArea
-
-        if inventoryState.currentFocus == "equipment" and inventoryState.selectedEquipmentSlotKey == slotKey then
-            love.graphics.setColor(1,1,0,0.3)
-            love.graphics.rectangle("fill", displayArea.x, displayArea.y, displayArea.width, displayArea.height)
-        end
-
-        love.graphics.setColor(0.8,0.8,1)
-        love.graphics.print(slotDisplayName .. ":", displayArea.x + 5, displayArea.y + 2)
-        love.graphics.setColor(1,1,1)
-        love.graphics.printf(itemDisplayName, displayArea.x + 5, displayArea.y + itemFont:getHeight() + 4, displayArea.width - 10, "left")
-
-        currentEqY = currentEqY + eqSlotHeight
-    end
-
-    love.graphics.setColor(1,1,1) -- Reset color
-
-    -- Modified Prompts
-    local promptText = ""
-    local currentSelectedItem = player.inventory[inventoryState.selectedSlot]
-    if inventoryState.currentFocus == "inventory" and currentSelectedItem then
-        local itemData = GameData.items[currentSelectedItem.itemId]
-        if itemData and itemData.type == "equipment" then
-            promptText = GameData.getText(currentGameLanguage, "prompt_equip", nil, "Enter to Equip (Tab to switch focus)")
-        elseif itemData and itemData.type == "consumable" then
-            promptText = GameData.getText(currentGameLanguage, "prompt_use", nil, "Enter to Use (Tab to switch focus)")
-        else
-             promptText = GameData.getText(currentGameLanguage, "prompt_inventory_actions", nil, "I to Close (Tab to switch focus)")
-        end
-    elseif inventoryState.currentFocus == "equipment" then
-        if inventoryState.selectedEquipmentSlotKey and player.equipment[inventoryState.selectedEquipmentSlotKey] then
-            promptText = GameData.getText(currentGameLanguage, "prompt_unequip", nil, "Enter to Unequip (Tab to switch focus)")
-        else
-            promptText = GameData.getText(currentGameLanguage, "prompt_equipment_actions", nil, "I to Close (Tab to switch focus)")
-        end
-    else -- Default prompt if nothing specific
-        promptText = GameData.getText(currentGameLanguage, "prompt_general_inventory", nil, "I to Close (Tab to switch focus)")
-    end
-
-    love.graphics.setFont(itemFont)
-    love.graphics.setColor(0.8,0.8,0.8)
-    love.graphics.printf(promptText, inventoryState.gridStartX, windowHeight - 40, windowWidth - inventoryState.gridStartX*2, "center")
-end
-
-local uiLayoutConfig = {
-  mainMenu = {
-    titleOffsetY = 0.2,
-    buttonWidth = 200,
-    buttonHeight = 40,
-    buttonSpacing = 50,
-    buttonOffsetY = 0.4
-  },
-}
-function drawMainMenu()
-  local windowWidth = love.graphics.getWidth()
-  local windowHeight = love.graphics.getHeight()
-  love.graphics.draw(resources.images.background, 0, 0, 0,
-    windowWidth/resources.images.background:getWidth(),
-    windowHeight/resources.images.background:getHeight())
-  local font = resources.fonts.battle
-  if currentGameLanguage == "zh" then
-    font = resources.fonts.chineseBattle
-  end
-  love.graphics.setFont(font)
-  love.graphics.setColor(1, 1, 1)
-  local title = GameData.getText(currentGameLanguage, "menu_title")
-  local titleWidth = font:getWidth(title)
-  love.graphics.print(
-    title,
-    windowWidth / 2 - titleWidth / 2,
-    windowHeight * uiLayoutConfig.mainMenu.titleOffsetY
-  )
-  local fontUI = resources.fonts.ui
-  if currentGameLanguage == "zh" then
-    fontUI = resources.fonts.chineseUI
-  end
-  love.graphics.setFont(fontUI)
-  menuState.buttonAreas = {}
-  for i, option in ipairs(menuState.options) do
-    local optionY = (
-      windowHeight * uiLayoutConfig.mainMenu.buttonOffsetY
-      + (i - 1) * uiLayoutConfig.mainMenu.buttonSpacing
-    )
-    local buttonRect = {
-      x = windowWidth / 2 - uiLayoutConfig.mainMenu.buttonWidth / 2,
-      y = optionY,
-      width = uiLayoutConfig.mainMenu.buttonWidth,
-      height = uiLayoutConfig.mainMenu.buttonHeight
-    }
-    menuState.buttonAreas[i] = buttonRect
-    if i == menuState.currentOption then
-      love.graphics.setColor(1, 1, 0)
-      love.graphics.rectangle("line", buttonRect.x, buttonRect.y, buttonRect.width, buttonRect.height)
-    else
-      love.graphics.setColor(1, 1, 1)
-    end
-    love.graphics.print(GameData.getText(currentGameLanguage, option.textKey), buttonRect.x, buttonRect.y)
-    love.graphics.setColor(0.8, 0.8, 0.8)
-    love.graphics.print(GameData.getText(currentGameLanguage, option.descriptionKey), buttonRect.x + 10, buttonRect.y + 20)
-  end
-  local fontUI = resources.fonts.ui
-  love.graphics.setFont(fontUI)
-  love.graphics.setColor(1,1,1)
-  local versionInfo = "V0.02\nBy Dundd2\nBuild with love-12.0-win64 Beta"
-  local textWidth = fontUI:getWidth(versionInfo)
-  local textHeight = fontUI:getHeight()
-  love.graphics.print(versionInfo, love.graphics.getWidth() - textWidth - 100, love.graphics.getHeight() - textHeight - 100)
-end
-function drawLevelSelect()
-  local windowWidth = love.graphics.getWidth()
-  local windowHeight = love.graphics.getHeight()
-  love.graphics.setColor(1, 1, 1)
-  love.graphics.draw(resources.images.background, 0, 0, 0,
-    windowWidth/resources.images.background:getWidth(),
-    windowHeight/resources.images.background:getHeight())
-  local font = resources.fonts.battle
-  if currentGameLanguage == "zh" then
-    font = resources.fonts.chineseBattle
-  end
-  love.graphics.setFont(font)
-  local title = GameData.getText(currentGameLanguage, "level_select_title")
-  local titleWidth = font:getWidth(title)
-  love.graphics.print(title, windowWidth / 2 - titleWidth / 2, 50)
-  local fontUI = resources.fonts.ui
-  if currentGameLanguage == "zh" then
-    fontUI = resources.fonts.chineseUI
-  end
-  love.graphics.setFont(fontUI)
-  menuState.levelSelect.buttonAreas = {}
-  for i = 1, menuState.levelSelect.maxLevel do
-      local levelY = 150 + (i-1) * 40
-      local buttonRect = {
-        x = windowWidth / 2 - 50,
-        y = levelY,
-        width = 100,
-        height = 30
-      }
-      menuState.levelSelect.buttonAreas[i] = buttonRect
-      if i == menuState.levelSelect.currentLevel then
-          love.graphics.setColor(1, 1, 0)
-          love.graphics.rectangle("line", buttonRect.x, buttonRect.y, buttonRect.width, buttonRect.height)
-      else
-          love.graphics.setColor(1, 1, 1)
-      end
-      local text = GameData.getText(currentGameLanguage, "level_number", {level = i})
-      -- local textWidth = fontUI:getWidth(text) -- Not needed if width is fixed
-      love.graphics.print(text, buttonRect.x + 10, buttonRect.y + 5) -- Add some padding
-  end
-
-  local totalRegularLevels = menuState.levelSelect.maxLevel
-  local grindingLevelBaseIndex = totalRegularLevels + 1
-
-  for i, grindingId in ipairs(menuState.levelSelect.grindingLevelIds) do
-      local levelY = 150 + (totalRegularLevels + i - 1) * 40 -- Continue Y position
-      local grindingLevelData = GameData.grindingLevels[grindingId]
-      local text = GameData.getText(currentGameLanguage, grindingLevelData.name_key, nil, grindingId)
-
-      local buttonRect = {
-          x = windowWidth / 2 - (fontUI:getWidth(text) / 2) - 10, -- Centered text with padding
-          y = levelY,
-          width = fontUI:getWidth(text) + 20, -- Dynamic width with padding
-          height = 30
-      }
-      menuState.levelSelect.buttonAreas[grindingLevelBaseIndex + i - 1] = buttonRect
-
-      if menuState.levelSelect.currentLevel == (grindingLevelBaseIndex + i - 1) then -- Check if this grinding level is selected
-          love.graphics.setColor(1, 1, 0) -- Highlight color
-          love.graphics.rectangle("line", buttonRect.x, buttonRect.y, buttonRect.width, buttonRect.height)
-          -- menuState.levelSelect.selectedGrindingLevelKey = grindingId -- This should be set on input, not draw
-      else
-          love.graphics.setColor(1, 1, 1)
-      }
-      love.graphics.print(text, buttonRect.x + 10, buttonRect.y + 5)
-  end
-
-  local backButtonRect = {
-    x = 10,
-    y = 10,
-    width = 50,
-    height = 50
-  }
-  menuState.levelSelect.backButtonArea = backButtonRect
-  love.graphics.setColor(1, 1, 1)
-  love.graphics.rectangle("line", backButtonRect.x, backButtonRect.y, backButtonRect.width, backButtonRect.height)
-  love.graphics.print("<", backButtonRect.x + 15, backButtonRect.y + 15)
-end
-function drawStoryDialogue()
-    local windowWidth = love.graphics.getWidth()
-    local windowHeight = love.graphics.getHeight()
-    love.graphics.draw(resources.images.background, 0, 0, 0,
-        windowWidth/resources.images.background:getWidth(),
-        windowHeight/resources.images.background:getHeight())
-    local currentDialogue = GameData.getCurrentDialogue(resources, currentGameLanguage)
-    if not currentDialogue then return end
-    local currentLevelData = GameData.story.levelIntros[currentState.currentLevel]
-    if currentLevelData and currentLevelData.background then
-        local bgKey = string.match(currentLevelData.background, "([^/]+)$"):gsub("%.png$", "")
-        if resources.images[bgKey] then
-            love.graphics.draw(resources.images[bgKey], 0, 0, 0,
-                windowWidth/resources.images[bgKey]:getWidth(),
-                windowHeight/resources.images[bgKey]:getHeight())
-        end
-    end
-    local bottomMargin = windowHeight * 0.05
-    local dialogBoxHeight = windowHeight * 0.2
-    local dialogBoxWidth = windowWidth * 0.8
-    local dialogBoxX = (windowWidth - dialogBoxWidth) / 2
-    local dialogBoxY = windowHeight - dialogBoxHeight - bottomMargin
-    
-    local portraitImage = currentDialogue.portraitKey and resources.images[currentDialogue.portraitKey] or nil
-    local maxPortraitWidth = dialogBoxHeight
-    local portraitDrawWidth = 0
-    local portraitDrawHeight = 0
-    local portraitDrawX = dialogBoxX + 10
-    local portraitDrawY = dialogBoxY + 10
-    if portraitImage then
-        portraitDrawWidth = math.min(portraitImage:getWidth(), maxPortraitWidth)
-        portraitDrawHeight = portraitDrawWidth * (portraitImage:getHeight() / portraitImage:getWidth())
-        if portraitDrawHeight > dialogBoxHeight - 20 then
-            portraitDrawHeight = dialogBoxHeight - 20
-            portraitDrawWidth = portraitDrawHeight * (portraitImage:getWidth() / portraitImage:getHeight())
-        end
-    end
-    love.graphics.setColor(0, 0, 0, 0.8)
-    love.graphics.rectangle("fill", dialogBoxX, dialogBoxY, dialogBoxWidth, dialogBoxHeight)
-    love.graphics.setColor(1, 1, 1)
-    love.graphics.rectangle("line", dialogBoxX, dialogBoxY, dialogBoxWidth, dialogBoxHeight)
-    if portraitImage then
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.draw(portraitImage, portraitDrawX, portraitDrawY, 0, portraitDrawWidth / portraitImage:getWidth(), portraitDrawHeight / portraitImage:getHeight())
-    end
-    if currentDialogue.enemyDisplayNameKey then
-        local enemyImageKey = enemyData[currentState.currentLevel] and enemyData[currentState.currentLevel].image or "enemyDemonKing"
-        local enemyImage = resources.images[enemyImageKey]
-        if enemyImage then
-            local enemyMaxHeight = windowHeight * 0.6
-            local enemyScale = enemyMaxHeight / enemyImage:getHeight()
-            local enemyDrawWidth = enemyImage:getWidth() * enemyScale
-            local enemyDrawHeight = enemyImage:getHeight() * enemyScale
-            local enemyDrawX = windowWidth - enemyDrawWidth - (windowWidth * 0.05)
-            local enemyDrawY = dialogBoxY - enemyDrawHeight + 20
-            love.graphics.setColor(1, 1, 1)
-            love.graphics.draw(enemyImage, enemyDrawX, enemyDrawY, 0, enemyScale, enemyScale)
-        end
-    end
-    local fontUIStory = resources.fonts.ui
-    if currentGameLanguage == "zh" then
-        fontUIStory = resources.fonts.chineseUI
-    end
-    love.graphics.setFont(fontUIStory)
-    love.graphics.setColor(0, 0, 1, 1)
-    local textStartX = portraitImage and portraitDrawX + portraitDrawWidth + 20 or dialogBoxX + 20
-    local textStartY = dialogBoxY + 30
-    local textWidthLimit = dialogBoxWidth - (portraitImage and portraitDrawWidth + 40 or 40)
-    love.graphics.printf(GameData.getCurrentText(), textStartX, textStartY, textWidthLimit, "left")
-    love.graphics.setColor(1, 1, 1)
-    local fontBattleStory = resources.fonts.battle
-    if currentGameLanguage == "zh" then
-        fontBattleStory = resources.fonts.chineseBattle
-    end
-    love.graphics.setFont(fontBattleStory)
-    love.graphics.setColor(1, 1, 0)
-    local speakerNameX = portraitImage and (portraitDrawX + portraitDrawWidth - fontBattleStory:getWidth(currentDialogue.speaker)) or (dialogBoxX + 20)
-    local speakerNameY = portraitImage and portraitDrawY or (dialogBoxY + 10)
-    love.graphics.print(currentDialogue.speaker, speakerNameX, speakerNameY)
-    if GameData.isTextComplete() then
-        love.graphics.setColor(1, 1, 1, 0.5 + math.sin(love.timer.getTime() * 5) * 0.5)
-        love.graphics.print(GameData.getText(currentGameLanguage, "story_continue_prompt"), dialogBoxX + dialogBoxWidth - 150, dialogBoxY + dialogBoxHeight - 30)
-    end
-    love.graphics.setColor(1, 1, 1)
-    love.graphics.rectangle("line", windowWidth - 150, windowHeight - 50, 100, 30)
-    love.graphics.print(GameData.getText(currentGameLanguage, "story_skip_button"), windowWidth - 140, windowHeight - 45)
-end
-function drawStoryPageUI()
-  local windowWidth = love.graphics.getWidth()
-  local windowHeight = love.graphics.getHeight()
-  love.graphics.setColor(1, 1, 1)
-  love.graphics.draw(resources.images.background, 0, 0, 0,
-    windowWidth/resources.images.background:getWidth(),
-    windowHeight/resources.images.background:getHeight())
-  local font = resources.fonts.battle
-  if currentGameLanguage == "zh" then
-    font = resources.fonts.chineseBattle
-  end
-  love.graphics.setFont(font)
-  love.graphics.setColor(1, 1, 1)
-  local title = GameData.getText(currentGameLanguage, "story_page_title")
-  local titleWidth = font:getWidth(title)
-  love.graphics.print(title, windowWidth / 2 - titleWidth / 2, 50)
-  local textStartX = 50
-  local textStartY = 100
-  local textWidthLimit = windowWidth - 100
-  local textHeightLimit = windowHeight - 200
-  local fontUI = resources.fonts.ui
-  if currentGameLanguage == "zh" then
-    fontUI = resources.fonts.chineseUI
-  end
-  love.graphics.setFont(fontUI)
-  love.graphics.setColor(1, 1, 1)
-  love.graphics.setScissor(textStartX, textStartY, textWidthLimit, textHeightLimit)
-  love.graphics.translate(0, -storyPageState.scrollPosition)
-  love.graphics.printf(storyPageState.storyText, textStartX, textStartY, textWidthLimit, "left")
-  love.graphics.setScissor()
-  love.graphics.translate(0, storyPageState.scrollPosition)
-  local backButtonRect = {
-    x = windowWidth / 2 - 100,
-    y = windowHeight - 80,
-    width = 200,
-    height = 40
-  }
-  storyPageState.backButtonArea = backButtonRect
-  love.graphics.setColor(1, 1, 1)
-  love.graphics.rectangle("line", backButtonRect.x, backButtonRect.y, backButtonRect.width, backButtonRect.height)
-  local buttonTextWidth = fontUI:getWidth(GameData.getText(currentGameLanguage, "story_page_back_button"))
-  love.graphics.print(GameData.getText(currentGameLanguage, "story_page_back_button"), backButtonRect.x + backButtonRect.width / 2 - buttonTextWidth / 2, backButtonRect.y + backButtonRect.height / 2 - 10)
-end
-function drawAboutPageUI()
-    local windowWidth = love.graphics.getWidth()
-    local windowHeight = love.graphics.getHeight()
-    love.graphics.setColor(1, 1, 1)
-    love.graphics.draw(resources.images.background, 0, 0, 0,
-        windowWidth/resources.images.background:getWidth(),
-        windowHeight/resources.images.background:getHeight())
-    local fontTitle = resources.fonts.battle
-    if currentGameLanguage == "zh" then
-        fontTitle = resources.fonts.chineseBattle
-    end
-    love.graphics.setFont(fontTitle)
-    love.graphics.setColor(1, 1, 1)
-    local title = GameData.getText(currentGameLanguage, "about_page_title")
-    local titleWidth = fontTitle:getWidth(title)
-    love.graphics.print(title, windowWidth / 2 - titleWidth / 2, 50)
-    if resources.images.authorPortrait then
-        local portrait = resources.images.authorPortrait
-        local portraitSize = 100
-        local portraitX = 50
-        local portraitY = 120
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.draw(portrait, portraitX, portraitY, 0, portraitSize / portrait:getWidth(), portraitSize / portrait:getHeight())
-    else
-        love.graphics.setColor(0.5, 0.5, 0.5)
-        love.graphics.rectangle("fill", 50, 120, 100, 100)
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.print("NO\nIMG", 70, 150)
-    end
-    local textStartX = 200
-    local textStartY = 120
-    local textWidthLimit = windowWidth - textStartX - 50
-    local textHeightLimit = windowHeight - textStartY - 200
-    local fontUI = resources.fonts.ui
-    if currentGameLanguage == "zh" then
-        fontUI = resources.fonts.chineseUI
-    end
-    love.graphics.setFont(fontUI)
-    love.graphics.setColor(1, 1, 1)
-    love.graphics.setScissor(textStartX, textStartY, textWidthLimit, textHeightLimit)
-    love.graphics.translate(0, -aboutPageState.scrollPosition)
-    love.graphics.printf(GameData.getText(currentGameLanguage, "about_project"), textStartX, textStartY, textWidthLimit, "left")
-    local staffText = GameData.getText(currentGameLanguage, "about_staff")
-    local staffTextY = textStartY + fontUI:getHeight(GameData.getText(currentGameLanguage, "about_project"), textWidthLimit) + 20
-    love.graphics.printf(staffText, textStartX, staffTextY, textWidthLimit, "left")
-    love.graphics.setScissor()
-    love.graphics.translate(0, aboutPageState.scrollPosition)
-    local backButtonRect = {
-        x = windowWidth / 2 - 100,
-        y = windowHeight - 80,
-        width = 200,
-        height = 40
-    }
-    aboutPageState.backButtonArea = backButtonRect
-    love.graphics.setColor(1, 1, 1)
-    love.graphics.rectangle("line", backButtonRect.x, backButtonRect.y, backButtonRect.width, backButtonRect.height)
-    local buttonTextWidth = fontUI:getWidth(GameData.getText(currentGameLanguage, "story_page_back_button"))
-    love.graphics.print(GameData.getText(currentGameLanguage, "story_page_back_button"), backButtonRect.x + backButtonRect.width / 2 - buttonTextWidth / 2, backButtonRect.y + backButtonRect.height / 2 - 10)
-end
-function drawDialogueBox(dialogue, windowWidth, windowHeight)
-    local dialogBoxWidth = windowWidth * 0.8
-    local dialogBoxHeight = 150
-    local dialogBoxX = (windowWidth - dialogBoxWidth) / 2
-    local dialogBoxY = windowHeight - dialogBoxHeight - 50
-    love.graphics.setColor(1, 1, 1)
-    love.graphics.draw(resources.images.dialogBox,
-        dialogBoxX, dialogBoxY,
-        0,
-        dialogBoxWidth / resources.images.dialogBox:getWidth(),
-        dialogBoxHeight / resources.images.dialogBox:getHeight())
-    love.graphics.setColor(1, 1, 0)
-    love.graphics.setFont(resources.fonts.battle)
-    love.graphics.print(dialogue.speaker, dialogBoxX + 20, dialogBoxY + 10)
-    local portraitKey = dialogue.portraitKey or ("portrait" .. dialogue.speaker)
-    if resources.images[portraitKey] then
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.draw(resources.images[portraitKey], dialogBoxX + 20, dialogBoxY - 80)
-    end
-    love.graphics.setColor(0, 0, 1, 1)
-    love.graphics.setFont(resources.fonts.ui)
-    love.graphics.printf(GameData.getCurrentText(), dialogBoxX + 40, dialogBoxY + 50, dialogBoxWidth - 80, "left")
-    drawDialoguePrompts(dialogBoxX, dialogBoxY, dialogBoxWidth, dialogBoxHeight, windowWidth, windowHeight)
-end
-function drawDialoguePrompts(dialogBoxX, dialogBoxY, dialogBoxWidth, dialogBoxHeight, windowWidth, windowHeight)
-    if GameData.isTextComplete() then
-        love.graphics.setColor(1, 1, 1, 0.5 + math.sin(love.timer.getTime() * 5) * 0.5)
-        love.graphics.print(GameData.getText(currentGameLanguage, "story_continue_prompt"), dialogBoxX + dialogBoxWidth - 150, dialogBoxY + dialogBoxHeight - 30)
-    end
-    love.graphics.setColor(1, 1, 1)
-    love.graphics.rectangle("line", windowWidth - 150, windowHeight - 50, 100, 30)
-    love.graphics.print(GameData.getText(currentGameLanguage, "story_skip_button"), windowWidth - 140, windowHeight - 45)
-end
-function drawDialogueChoices(choices, windowWidth, windowHeight)
-    if not choices then return end
-    local choiceBoxWidth = windowWidth * 0.3
-    local choiceBoxHeight = #choices * 40 + 20
-    local choiceBoxX = windowWidth - choiceBoxWidth - 20
-    local choiceBoxY = windowHeight - choiceBoxHeight - 200
-    love.graphics.setColor(0, 0, 0, 0.8)
-    love.graphics.rectangle("fill", choiceBoxX, choiceBoxY, choiceBoxWidth, choiceBoxHeight)
-    love.graphics.setFont(resources.fonts.ui)
-    for i, choice in ipairs(choices) do
-        if i == choices.current then
-            love.graphics.setColor(1, 1, 0)
-        else
-            love.graphics.setColor(1, 1, 1)
-        end
-        love.graphics.print(choice.text, choiceBoxX + 10, choiceBoxY + 10 + (i-1) * 40)
-    end
-end
-function drawCharacters()
-  local windowWidth = love.graphics.getWidth()
-  local windowHeight = love.graphics.getHeight()
-
-  local playerImage = animations.player.current == "stand" and resources.images.playerStand or resources.images.playerAttack
-  local playerScaleX = positions.player.maxWidth / playerImage:getWidth()
-  local playerScaleY = positions.player.maxHeight / playerImage:getHeight()
-  local playerScale = math.min(playerScaleX, playerScaleY)
-
-  if playerImage:getHeight() * playerScale < positions.player.minHeight then
-      playerScale = positions.player.minHeight / playerImage:getHeight()
-  end
-
-  local playerDrawX = positions.player.x - (playerImage:getWidth() * playerScale) / 2
-  local playerDrawY = positions.player.y - (playerImage:getHeight() * playerScale) / 2
-  love.graphics.draw(playerImage, playerDrawX, playerDrawY, 0, playerScale, playerScale)
-
-  -- Use stored keys in enemy object, which are populated by restartGame
-  local enemyStandImageKey = enemy.image -- This is already the image object from resources.images
-  local enemyAttackImageActualKey = enemy.attackImageKey -- This is the string key
-
-  local currentEnemySprite
-  if animations.enemy.current == "attack" then
-    if enemyAttackImageActualKey and resources.images[enemyAttackImageActualKey] then
-      currentEnemySprite = resources.images[enemyAttackImageActualKey]
-    else
-      currentEnemySprite = enemyStandImage -- Fallback to stand image if attack image is missing
-    end
-  else
-    currentEnemySprite = enemyStandImage
-  end
-
-  if not currentEnemySprite then
-      print("[ERROR] Enemy sprite is nil in drawCharacters. Fallback.")
-      currentEnemySprite = resources.images.enemyDemonKing -- Absolute fallback
-  end
-
-  local enemyImage = currentEnemySprite
-  local enemyScaleX = positions.enemy.maxWidth / enemyImage:getWidth()
-  local enemyScaleY = positions.enemy.maxHeight / enemyImage:getHeight()
-  local enemyScale = math.min(enemyScaleX, enemyScaleY)
-
-  if enemyImage:getHeight() * enemyScale < positions.enemy.minHeight then
-      enemyScale = positions.enemy.minHeight / enemyImage:getHeight()
-  end
-
-  local enemyDrawX = positions.enemy.x - (enemyImage:getWidth() * enemyScale) / 2
-  local enemyDrawY = positions.enemy.y - (enemyImage:getHeight() * enemyScale) / 2
-  love.graphics.draw(enemyImage, enemyDrawX, enemyDrawY, 0, enemyScale, enemyScale)
-end
-function drawBattleUI()
-  if gameState == "story" then
-    return
-  end
-  local windowWidth = love.graphics.getWidth()
-  local windowHeight = love.graphics.getHeight()
-
-  local fontUI = resources.fonts.ui
-  if currentGameLanguage == "zh" then
-    fontUI = resources.fonts.chineseUI
-  end
-  love.graphics.setFont(fontUI)
-  love.graphics.setColor(1, 1, 1)
-
-  local uiFrameWidth = windowWidth * 0.3
-  local uiFrameHeight = windowHeight * 0.25
-  local uiFrameX = windowWidth * 0.02
-  local uiFrameY = windowHeight * 0.73
-
-  local uiFrameImage = resources.images.uiFrame
-  local uiFrameScaleX = uiFrameWidth / uiFrameImage:getWidth()
-  local uiFrameScaleY = uiFrameHeight / uiFrameImage:getHeight()
-  love.graphics.draw(uiFrameImage, uiFrameX, uiFrameY, 0, uiFrameScaleX, uiFrameScaleY)
-
-  local hpBarWidth = windowWidth * 0.2
-  local hpBarHeight = windowHeight * 0.03
-  local playerHpX = windowWidth * 0.02
-  local playerHpY = windowHeight * 0.02
-
-  love.graphics.setColor(1, 0, 0)
-  love.graphics.rectangle("fill", playerHpX, playerHpY, hpBarWidth, hpBarHeight)
-  love.graphics.setColor(0, 1, 0)
-  love.graphics.rectangle("fill", playerHpX, playerHpY, (player.hp / player.maxHp) * hpBarWidth, hpBarHeight)
-  love.graphics.setColor(1, 1, 1)
-  local playerHpText = string.format("HP: %d / %d", math.floor(player.hp), math.floor(player.maxHp))
-  local playerHpTextWidth = fontUI:getWidth(playerHpText)
-  love.graphics.print(playerHpText, playerHpX + hpBarWidth / 2 - playerHpTextWidth / 2, playerHpY + hpBarHeight + 5)
-
-  local mpBarWidth = hpBarWidth * 0.8
-  local mpBarHeight = windowHeight * 0.02
-  local playerMpX = playerHpX + hpBarWidth - mpBarWidth - 5
-  local playerMpY = playerHpY + hpBarHeight + 5 + fontUI:getHeight() + 5
-  love.graphics.setColor(0, 0, 1)
-  love.graphics.rectangle("fill", playerMpX, playerMpY, mpBarWidth, mpBarHeight)
-  love.graphics.setColor(0.5, 0.5, 1)
-  love.graphics.rectangle("fill", playerMpX, playerMpY, (player.mp / player.maxMp) * mpBarWidth, mpBarHeight)
-  love.graphics.setColor(1, 1, 1)
-  local playerMpText = string.format("MP: %d / %d", math.floor(player.mp), math.floor(player.maxMp))
-  local playerMpTextWidth = fontUI:getWidth(playerMpText)
-  love.graphics.print(playerMpText, playerMpX + mpBarWidth / 2 - playerMpTextWidth / 2, playerMpY + mpBarHeight + 5)
-
-  local statsX = playerHpX
-  local statsY = playerHpY + hpBarHeight + 5 + fontUI:getHeight() * 2 + 10
-  love.graphics.print(string.format("LV: %d", player.level), statsX, statsY)
-  love.graphics.print(string.format("EXP: %d/%d", player.exp, player.expToNextLevel), statsX, statsY + fontUI:getHeight())
-
-  love.graphics.print(GameData.getText(currentGameLanguage, "player_stats_attack") .. ": " .. player.attack, statsX + 100, statsY)
-  love.graphics.print(GameData.getText(currentGameLanguage, "player_stats_defense") .. ": " .. player.defense, statsX + 100, statsY + fontUI:getHeight())
-  love.graphics.print(GameData.getText(currentGameLanguage, "player_stats_crit_rate") .. ": " .. player.critRate .. "%", statsX + 200, statsY)
-  love.graphics.print(GameData.getText(currentGameLanguage, "player_stats_crit_damage") .. ": " .. player.critDamage .. "X", statsX + 200, statsY + fontUI:getHeight())
-
-  local enemyHpX = windowWidth * 0.98 - hpBarWidth
-  local enemyHpY = windowHeight * 0.02
-
-  love.graphics.setColor(1, 0, 0)
-  love.graphics.rectangle("fill", enemyHpX, enemyHpY, hpBarWidth, hpBarHeight)
-  love.graphics.setColor(0, 1, 0)
-  love.graphics.rectangle("fill", enemyHpX, enemyHpY, (enemy.hp / enemy.maxHp) * hpBarWidth, hpBarHeight)
-  love.graphics.setColor(1, 1, 1)
-  local enemyHpText = string.format("HP: %d / %d", math.floor(enemy.hp), math.floor(enemy.maxHp))
-  local enemyHpTextWidth = fontUI:getWidth(enemyHpText)
-  love.graphics.print(enemyHpText, enemyHpX + hpBarWidth / 2 - enemyHpTextWidth / 2, enemyHpY + hpBarHeight + 5)
-  -- Use stored displayNameKey from enemy object
-  local enemyName = GameData.getText(currentGameLanguage, enemy.displayNameKey, nil, "Unknown Enemy")
-  local enemyNameWidth = fontUI:getWidth(enemyName)
-  love.graphics.print(enemyName, enemyHpX + hpBarWidth / 2 - enemyNameWidth / 2, enemyHpY - fontUI:getHeight() - 5)
-
-
-  if battleState.phase == "select" then
-    battleState.buttonAreas = {}
-    love.graphics.setColor(1, 1, 1)
-    local optionStartX = uiFrameX + uiFrameWidth * 0.05
-    local optionStartY = uiFrameY + uiFrameHeight * 0.05
-    local optionButtonWidth = uiFrameWidth * 0.9
-    local optionButtonHeight = uiFrameHeight * 0.2
-    local optionSpacing = uiFrameHeight * 0.25
-
-    for i, option in ipairs(battleState.options) do
-      local optionY = optionStartY + (i-1) * optionSpacing
-      local buttonRect = {
-        x = optionStartX,
-        y = optionY,
-        width = optionButtonWidth,
-        height = optionButtonHeight
-      }
-      battleState.buttonAreas[i] = buttonRect
-      if i == battleState.currentOption then
-        love.graphics.setColor(1, 1, 0)
-        love.graphics.rectangle("line", buttonRect.x, buttonRect.y, buttonRect.width, buttonRect.height)
-      else
-        love.graphics.setColor(1, 1, 1)
-      end
-      love.graphics.print(GameData.getText(currentGameLanguage, "battle_action_" .. option.name:lower()), buttonRect.x + optionButtonWidth * 0.05, buttonRect.y + optionButtonHeight * 0.05)
-      love.graphics.setColor(0.8, 0.8, 0.8)
-      love.graphics.print(GameData.getText(currentGameLanguage, "battle_action_desc_" .. option.name:lower()), buttonRect.x + optionButtonWidth * 0.05, buttonRect.y + optionButtonHeight * 0.5)
-    end
-  end
-
-  local iconSize = windowHeight * 0.08
-  local iconSpacing = windowWidth * 0.02
-  local totalIconsWidth = (#skillInfo * iconSize) + ((#skillInfo - 1) * iconSpacing)
-  local skillIconsStartX = (windowWidth - totalIconsWidth) / 2
-  local skillIconsStartY = windowHeight * 0.9
-
-  for i, skill in ipairs(skillInfo) do
-    love.graphics.setColor(1, 1, 1)
-    if resources.images[skill.icon] then
-        love.graphics.draw(resources.images[skill.icon],
-          skillIconsStartX + (i-1) * (iconSize + iconSpacing),
-          skillIconsStartY,
-          0,
-          iconSize / resources.images[skill.icon]:getWidth(),
-          iconSize / resources.images[skill.icon]:getHeight())
-    else
-        love.graphics.rectangle("fill", skillIconsStartX + (i-1) * (iconSize + iconSpacing), skillIconsStartY, iconSize, iconSize)
-        love.graphics.setColor(1,0,0)
-        love.graphics.print("?", skillIconsStartX + (i-1) * (iconSize + iconSpacing) + iconSize/2 - 5, skillIconsStartY + iconSize/2 - 10)
-        love.graphics.setColor(1,1,1)
-    end
-    local cooldown = skillSystem[skill.key].cooldown
-    local mpCost = skill.mpCost or 0
-
-    if cooldown > 0 or player.mp < mpCost then
-      love.graphics.setColor(0, 0, 0, 0.7)
-      if resources.images.cooldownOverlay then
-          love.graphics.draw(resources.images.cooldownOverlay,
-            skillIconsStartX + (i-1) * (iconSize + iconSpacing),
-            skillIconsStartY,
-            0,
-            iconSize / resources.images.cooldownOverlay:getWidth(),
-            iconSize / resources.images.cooldownOverlay:getHeight())
-      else
-          love.graphics.rectangle("fill", skillIconsStartX + (i-1) * (iconSize + iconSpacing), skillIconsStartY, iconSize, iconSize)
-      end
-      love.graphics.setColor(1, 1, 1)
-      love.graphics.setFont(resources.fonts.ui)
-      if cooldown > 0 then
-        love.graphics.print(cooldown,
-          skillIconsStartX + (i-1) * (iconSize + iconSpacing) + iconSize/2 - fontUI:getWidth(tostring(cooldown))/2,
-          skillIconsStartY + iconSize/2 - fontUI:getHeight()/2)
-      elseif player.mp < mpCost then
-        love.graphics.print(mpCost,
-          skillIconsStartX + (i-1) * (iconSize + iconSpacing) + iconSize/2 - fontUI:getWidth(tostring(mpCost))/2,
-          skillIconsStartY + iconSize/2 - fontUI:getHeight()/2)
-        love.graphics.setColor(1, 0.5, 0.5)
-      end
-    end
-  end
-
-  -- Draw "Leave Training" button if in grinding mode
-  if currentState.isGrinding then
-      local buttonWidth = 150
-      local buttonHeight = 40
-      local buttonX = windowWidth - buttonWidth - 20 -- Position it e.g., top-right or bottom-right
-      local buttonY = windowHeight * 0.1 -- Example: near top-right below enemy HP
-
-      battleState.leaveGrindingButtonArea = {x = buttonX, y = buttonY, width = buttonWidth, height = buttonHeight}
-
-      love.graphics.setFont(fontUI) -- Ensure uiFont (fontUI) is active
-      local text = GameData.getText(currentGameLanguage, "battle_action_leave_grinding", nil, "Leave Training") -- Key to be added
-      local textWidth = fontUI:getWidth(text)
-
-      -- Simple button drawing
-      love.graphics.setColor(0.7, 0.2, 0.2, 0.8) -- Reddish button
-      love.graphics.rectangle("fill", buttonX, buttonY, buttonWidth, buttonHeight)
-      love.graphics.setColor(1,1,1)
-      love.graphics.rectangle("line", buttonX, buttonY, buttonWidth, buttonHeight)
-      love.graphics.printf(text, buttonX + (buttonWidth - textWidth)/2, buttonY + (buttonHeight - fontUI:getHeight())/2, buttonWidth, "center")
-  else
-      battleState.leaveGrindingButtonArea = nil -- Ensure it's nil when not grinding
-  end
-end
-function drawEffects()
-love.graphics.setColor(1, 1, 1)
-for _, effect in ipairs(battleState.effects) do
-  if effect.type == "hit" or effect.type == "defend" or effect.type == "heal" then
-    if effect.particleSystem then
-      love.graphics.draw(effect.particleSystem, effect.x, effect.y)
-    end
-  elseif effect.type == "damage" then
-    love.graphics.setFont(resources.fonts.damage)
-    love.graphics.setColor(effect.color[1], effect.color[2], effect.color[3])
-    love.graphics.print(effect.amount, effect.x, effect.y)
-    love.graphics.setColor(1, 1, 1)
-  else
-    if resources.images[effect.type] then
-      love.graphics.draw(resources.images[effect.type], effect.x, effect.y, effect.rotation, effect.scale, effect.scale)
-    end
-  end
-end
-end
-function drawBattleMessage()
-    if battleState.message ~= "" and battleState.messageTimer > 0 then
-        local fontBattleMsg = resources.fonts.battle
-        if currentGameLanguage == "zh" then
-            fontBattleMsg = resources.fonts.chineseBattle
-        end
-        love.graphics.setFont(fontBattleMsg)
-        if string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_enemy_attack", {damage=0})) or
-           string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_enemy_crit", {damage=0})) or
-           string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_enemy_defend")) then
-            love.graphics.setColor(1, 0, 0)
-        elseif string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_player_attack", {damage=0})) or
-               string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_player_crit", {damage=0})) or
-               string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_player_defend")) or
-               string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_player_special", {damage=0})) or
-               string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_player_heal", {healAmount=0})) then
-            love.graphics.setColor(0, 1, 0)
-        elseif string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_exp_gain", {exp=0})) or
-               string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_level_up", {level=0})) then
-            love.graphics.setColor(0, 0.8, 0.8)
-        else
-            love.graphics.setColor(1, 1, 0)
-        end
-        local textWidth = fontBattleMsg:getWidth(battleState.message)
-        love.graphics.print(battleState.message,
-            love.graphics.getWidth() / 2 - textWidth / 2,
-            love.graphics.getHeight() - 150)
-        love.graphics.setColor(1,1,1)
-    end
-    if gameState == "victory" or gameState == "defeat" then
-        local fontBattleResult = resources.fonts.battle
-        if currentGameLanguage == "zh" then
-            fontBattleResult = resources.fonts.chineseBattle
-        end
-        love.graphics.setFont(fontBattleResult)
-        if player.hp <= 0 then
-          love.graphics.setColor(1, 0, 0)
-          local text = GameData.getText(currentGameLanguage, "defeat_title")
-          local textWidth = fontBattleResult:getWidth(text)
-          love.graphics.print(text, love.graphics.getWidth() / 2 - textWidth / 2, love.graphics.getHeight() / 2 - 30)
-        elseif enemy.hp <= 0 then
-          love.graphics.setColor(0, 1, 0)
-          local text = GameData.getText(currentGameLanguage, "victory_title")
-          local textWidth = fontBattleResult:getWidth(text)
-          love.graphics.print(text, love.graphics.getWidth() / 2 - textWidth / 2, love.graphics.getHeight() / 2 - 30)
-        end
-        love.graphics.setColor(1,1,1)
-    end
-end
-function updateAnimations(dt)
-  if animations.player.current == "attack" then
-    animations.player.timer = animations.player.timer + dt
-    if animations.player.timer < 0.2 then
-      animations.player.x = animations.player.x + (200 * dt)
-    elseif animations.player.timer < 0.4 then
-      animations.player.x = animations.player.x - (200 * dt)
-    else
-      animations.player.timer = 0
-      animations.player.current = "stand"
-      animations.player.x = animations.player.originalX
-    end
-  end
-  if animations.enemy.current == "attack" then
-    animations.enemy.timer = animations.enemy.timer + dt
-    if animations.enemy.timer < 0.2 then
-      animations.enemy.x = animations.enemy.x - (200 * dt)
-    elseif animations.enemy.timer < 0.4 then
-      animations.enemy.x = animations.enemy.x + (200 * dt)
-    else
-      animations.enemy.timer = 0
-      animations.enemy.current = "stand"
-      animations.enemy.x = animations.enemy.originalX
-    end
-  end
-end
-function updateEffects(dt)
-  for i = #battleState.effects, 1, -1 do
-    local effect = battleState.effects[i]
-    if effect.type == "hit" or effect.type == "defend" or effect.type == "heal" then
-      if effect.particleSystem then
-        effect.particleSystem:update(dt)
-        effect.timer = effect.timer - dt
-        if effect.timer <= 0 then
-          effect.particleSystem:stop()
-          table.remove(battleState.effects, i)
-        end
-      else
-        table.remove(battleState.effects, i)
-      end
-    elseif effect.type == "damage" then
-      effect.timer = effect.timer - dt
-      effect.y = effect.y - 30 * dt
-      if effect.timer <= 0 then
-        table.remove(battleState.effects, i)
-      end
-    else
-      effect.timer = effect.timer - dt
-      if effect.timer <= 0 then
-        table.remove(battleState.effects, i)
-      end
-    end
-  end
-end
-function handleMenuInput(dt)
-  if not dt then return end
-  local moved = false
-  local prevOption = menuState.currentOption
-  local direction = "None"
-  menuState.navTimer = menuState.navTimer + dt
-  if menuState.navTimer > menuState.navDelay then
-    if love.keyboard.isDown("up") or love.keyboard.isDown("w") then
-      menuState.currentOption = menuState.currentOption - 1
-      moved = true
-      direction = "Up"
-      menuState.navTimer = 0
-    elseif love.keyboard.isDown("down") or love.keyboard.isDown("s") then
-      menuState.currentOption = menuState.currentOption + 1
-      moved = true
-      direction = "Down"
-      menuState.navTimer = 0
-    end
-  end
-  if moved then
-    if menuState.currentOption < 1 then
-      menuState.currentOption = #menuState.options
-    elseif menuState.currentOption > #menuState.options then
-      menuState.currentOption = 1
-    end
-    if menuState.currentOption ~= prevOption then
-      print("[MENU] Navigated menu: " .. direction .. ", selected option index: " .. menuState.currentOption .. ", option name: " .. GameData.getText(currentGameLanguage, menuState.options[menuState.currentOption].textKey))
-    end
-  end
-end
-function handleStoryPageInput(dt)
-  if not dt then return end
-  local scrollSpeed = 200 * dt
-  if love.keyboard.isDown("down") or love.keyboard.isDown("s") then
-    storyPageState.scrollPosition = storyPageState.scrollPosition + scrollSpeed
-  elseif love.keyboard.isDown("up") or love.keyboard.isDown("w") then
-    storyPageState.scrollPosition = storyPageState.scrollPosition - scrollSpeed
-    if storyPageState.scrollPosition < 0 then
-      storyPageState.scrollPosition = 0
-    end
-  end
-end
-function handleAboutPageInput(dt)
-    if not dt then return end
-    local scrollSpeed = 200 * dt
-    if love.keyboard.isDown("down") or love.keyboard.isDown("s") then
-        aboutPageState.scrollPosition = aboutPageState.scrollPosition + scrollSpeed
-    elseif love.keyboard.isDown("up") or love.keyboard.isDown("w") then
-        aboutPageState.scrollPosition = aboutPageState.scrollPosition - scrollSpeed
-        if aboutPageState.scrollPosition < 0 then
-            aboutPageState.scrollPosition = 0
-        end
-    end
-end
-function handleLevelSelectInput(dt)
-  local moved = false
-  local prevLevel = menuState.levelSelect.currentLevel
-  menuState.levelSelect.navTimer = menuState.levelSelect.navTimer + dt
-  local totalOptions = menuState.levelSelect.maxLevel + #menuState.levelSelect.grindingLevelIds
-
-  if  menuState.levelSelect.navTimer >  menuState.levelSelect.navDelay then
-    if love.keyboard.isDown("up") or love.keyboard.isDown("w") then
-      menuState.levelSelect.currentLevel = math.max(1, menuState.levelSelect.currentLevel - 1)
-      moved = true
-      menuState.levelSelect.navTimer = 0
-    elseif love.keyboard.isDown("down") or love.keyboard.isDown("s") then
-      menuState.levelSelect.currentLevel = math.min(totalOptions, menuState.levelSelect.currentLevel + 1)
-      moved = true
-      menuState.levelSelect.navTimer = 0
-    end
-  end
-  if moved and menuState.levelSelect.currentLevel ~= prevLevel then
-    if menuState.levelSelect.currentLevel > menuState.levelSelect.maxLevel then
-        local grindingIndex = menuState.levelSelect.currentLevel - menuState.levelSelect.maxLevel
-        menuState.levelSelect.selectedGrindingLevelKey = menuState.levelSelect.grindingLevelIds[grindingIndex]
-    else
-        menuState.levelSelect.selectedGrindingLevelKey = nil
-    end
-    print("[LEVEL SELECT] Level selected: " .. menuState.levelSelect.currentLevel .. " Grinding Key: " .. tostring(menuState.levelSelect.selectedGrindingLevelKey))
-  end
-end
-local storyEnterTimer = 0
-local storyEnterDelay = 0.6
-function handleStoryInput(dt)
-    storyEnterTimer = storyEnterTimer + dt
-    if love.keyboard.isDown("return") and storyEnterTimer > storyEnterDelay then
-        storyEnterTimer = 0
-        print("[STORY] Continue dialogue pressed")
-        GameData.nextDialogue()
-        if not currentState.isPlaying then
-            if currentState.isEnding then
-                transitionGameState(gameState, "menu")
-            else
-                transitionGameState(gameState, "battle")
-                restartGame()
-            end
-        end
-    elseif love.keyboard.isDown("escape") then
-        print("[STORY] Skip dialogue pressed")
-        GameData.skipDialogue()
-        transitionGameState(gameState, "battle")
-        restartGame()
-    end
-end
-function updateBattleAction(dt)
-end
-function handleBattleInput()
-  local moved = false
-  local prevBattleOption = battleState.currentOption
-  if love.keyboard.isDown("up") or love.keyboard.isDown("w") then
-    battleState.currentOption = battleState.currentOption - 1
-    if battleState.currentOption < 1 then
-      battleState.currentOption = #battleState.options
-    end
-    moved = true
-  elseif love.keyboard.isDown("down") or love.keyboard.isDown("s") then
-    battleState.currentOption = battleState.currentOption + 1
-    if battleState.currentOption > #battleState.options then
-      battleState.currentOption = 1
-    end
-    moved = true
-  end
-  if moved then
-    if battleState.currentOption ~= prevBattleOption then
-      print("[BATTLE MENU] Option selected: " .. battleState.currentOption)
-    end
-  end
-end
-local optionsNavTimerLR = 0
-local optionsNavDelayLR = 0.6
-function handleOptionsInput(dt)
-  local moved = false
-  local prevOption = optionsState.currentOption
-  local direction = "None"
-  optionsState.navTimer = optionsState.navTimer + dt
-  optionsNavTimerLR = optionsNavTimerLR + dt
-  if optionsState.navTimer > optionsState.navDelay then
-    if love.keyboard.isDown("up") or love.keyboard.isDown("w") then
-      optionsState.currentOption = optionsState.currentOption - 1
-      moved = true
-      direction = "Up"
-      optionsState.navTimer = 0
-    elseif love.keyboard.isDown("down") or love.keyboard.isDown("s") then
-      optionsState.currentOption = optionsState.currentOption + 1
-      moved = true
-      direction = "Down"
-      optionsState.navTimer = 0
-    end
-  end
-  if optionsNavTimerLR > optionsNavDelayLR then
-    if love.keyboard.isDown("left") or love.keyboard.isDown("a") then
-      optionsNavTimerLR = 0
-      local currentOption = optionsState.options[optionsState.currentOption]
-      if currentOption.type == "language" then
-        currentOption.currentOption = currentOption.currentOption - 1
-        if currentOption.currentOption < 1 then
-          currentOption.currentOption = #currentOption.languageOptions
-        end
-        currentGameLanguage = currentOption.languageOptions[currentOption.currentOption]
-        setCurrentLanguage(currentGameLanguage)
-        storyPageState.storyText = GameData.getText(currentGameLanguage, "game_full_story")
-        aboutPageState.storyText = GameData.getText(currentGameLanguage, "about_project")
-        aboutPageState.staffText = GameData.getText(currentGameLanguage, "about_staff")
-        print("[OPTIONS MENU] Language changed to: " .. currentGameLanguage)
-      elseif currentOption.type == "resolution" then
-        currentOption.currentOption = currentOption.currentOption - 1
-        if currentOption.currentOption < 1 then
-          currentOption.currentOption = #currentOption.resolutionOptions
-        end
-        currentResolutionIndex = currentOption.currentOption
-        applyResolutionChange()
-      elseif currentOption.type == "font_size" then
-        currentOption.currentOption = currentOption.currentOption - 1
-        if currentOption.currentOption < 1 then
-            currentOption.currentOption = #currentOption.fontSizeOptions
-        end
-        GAME_CONSTANTS.currentFontSizeIndex = currentOption.currentOption
-        applyFontSizeChange()
-      end
-      moved = true
-    elseif love.keyboard.isDown("right") or love.keyboard.isDown("d") then
-      optionsNavTimerLR = 0
-      local currentOption = optionsState.options[optionsState.currentOption]
-       if currentOption.type == "language" then
-        currentOption.currentOption = currentOption.currentOption + 1
-        if currentOption.currentOption > #currentOption.languageOptions then
-          currentOption.currentOption = 1
-        end
-        currentGameLanguage = currentOption.languageOptions[currentOption.currentOption]
-        setCurrentLanguage(currentGameLanguage)
-        storyPageState.storyText = GameData.getText(currentGameLanguage, "game_full_story")
-        aboutPageState.storyText = GameData.getText(currentGameLanguage, "about_project")
-        aboutPageState.staffText = GameData.getText(currentGameLanguage, "about_staff")
-        print("[OPTIONS MENU] Language changed to: " .. currentGameLanguage)
-      elseif currentOption.type == "resolution" then
-        currentOption.currentOption = currentOption.currentOption + 1
-        if currentOption.currentOption > #currentOption.resolutionOptions then
-          currentOption.currentOption = 1
-        end
-         currentResolutionIndex = currentOption.currentOption
-         applyResolutionChange()
-      elseif currentOption.type == "font_size" then
-        currentOption.currentOption = currentOption.currentOption + 1
-        if currentOption.currentOption > #currentOption.fontSizeOptions then
-            currentOption.currentOption = 1
-        end
-        GAME_CONSTANTS.currentFontSizeIndex = currentOption.currentOption
-        applyFontSizeChange()
-      end
-      moved = true
-    end
-  end
-  if moved then
-    if optionsState.currentOption < 1 then
-      optionsState.currentOption = #optionsState.options
-    elseif optionsState.currentOption > #optionsState.options then
-      optionsState.currentOption = 1
-    end
-    if optionsState.currentOption ~= prevOption then
-      print("[OPTIONS MENU] Navigated menu: " .. direction .. ", selected option index: " .. optionsState.currentOption .. ", option name: " .. GameData.getText(currentGameLanguage, optionsState.options[optionsState.currentOption].textKey))
-    end
-  end
-end
-function applyResolutionChange()
-  screenWidth = availableResolutions[currentResolutionIndex].width
-  screenHeight = availableResolutions[currentResolutionIndex].height
-  love.window.setMode(screenWidth, screenHeight, {resizable = false, vsync = true, fullscreen = playerSettings.isFullScreen})
-  print("[GAME] Resolution changed to " .. screenWidth .. "x" .. screenHeight)
-    positions.player = {
-        x = screenWidth * 0.25,
-        y = screenHeight * 0.5,
-        scale = 1.0,
-        maxWidth = screenWidth * 0.4,
-        maxHeight = screenHeight * 0.6,
-        minHeight = screenHeight * 0.2,
-    }
-    positions.enemy = {
-        x = screenWidth * 0.75,
-        y = screenHeight * 0.5,
-        scale = 1.0,
-        maxWidth = screenWidth * 0.4,
-        maxHeight = screenHeight * 0.6,
-        minHeight = screenHeight * 0.2,
-    }
-    positions.playerHP = {x = screenWidth * 0.02, y = screenHeight * 0.02}
-    positions.enemyHP = {x = screenWidth * 0.78, y = screenHeight * 0.02}
-    positions.playerUI = {x = screenWidth * 0.02, y = screenHeight * 0.75}
-    positions.enemyUI = {x = screenWidth * 0.68, y = screenHeight * 0.75}
-    animations.player.x = positions.player.x
-    animations.player.y = positions.player.y
-    animations.player.originalX = positions.player.x
-    animations.enemy.x = positions.enemy.x
-    animations.enemy.y = positions.enemy.y
-    animations.enemy.originalX = positions.enemy.x
-end
 function love.keypressed(key)
   if gameState == "menu" then
     if key == "return" or key == "space" then
@@ -2829,23 +431,20 @@ function love.keypressed(key)
     if key == "return" then
         local selectedIdx = menuState.levelSelect.currentLevel
         if selectedIdx >= 1 and selectedIdx <= menuState.levelSelect.maxLevel then
-            -- Regular level selected
-            currentState.isGrinding = false -- Ensure this is reset
+            GameData.story.currentState.isGrinding = false
             GameData.startLevelDialogue(selectedIdx)
-            transitionGameState(gameState, "story")
+            GameHelpers.transitionGameState(gameState, "story")
             print("[LEVEL SELECT] Regular Level " .. selectedIdx .. " selected")
         elseif selectedIdx > menuState.levelSelect.maxLevel and selectedIdx <= totalOptions then
-            -- Grinding level selected
             local grindingIndex = selectedIdx - menuState.levelSelect.maxLevel
             local grindingId = menuState.levelSelect.grindingLevelIds[grindingIndex]
             if grindingId then
-                currentState.isGrinding = true
-                currentState.currentGrindingLevelId = grindingId
-                menuState.levelSelect.selectedGrindingLevelKey = grindingId -- Ensure this is set
-                print("[LEVEL SELECT] Grinding Level " .. grindingId .. " selected. isGrinding: " .. tostring(currentState.isGrinding))
-                -- No dialogue for grinding, directly to battle
-                restartGame()
-                transitionGameState(gameState, "battle")
+                GameData.story.currentState.isGrinding = true
+                GameData.story.currentState.currentGrindingLevelId = grindingId
+                menuState.levelSelect.selectedGrindingLevelKey = grindingId
+                print("[LEVEL SELECT] Grinding Level " .. grindingId .. " selected. isGrinding: " .. tostring(GameData.story.currentState.isGrinding))
+                GameHelpers.restartGame()
+                GameHelpers.transitionGameState(gameState, "battle")
             else
                 print("[LEVEL SELECT] Error: Could not find grindingId for index: " .. grindingIndex)
             end
@@ -2853,7 +452,7 @@ function love.keypressed(key)
             print("[LEVEL SELECT] Error: selectedIdx out of bounds: " .. selectedIdx)
         end
     elseif key == "escape" then
-      transitionGameState(gameState, "menu")
+      GameHelpers.transitionGameState(gameState, "menu")
     elseif key == "up" or key == "w" then
       menuState.levelSelect.currentLevel = math.max(1, menuState.levelSelect.currentLevel - 1)
       if menuState.levelSelect.currentLevel > menuState.levelSelect.maxLevel and menuState.levelSelect.currentLevel <= totalOptions then
@@ -2875,61 +474,47 @@ function love.keypressed(key)
     if key == "return" then
       print("[STORY] Continue dialogue key pressed")
       GameData.nextDialogue()
-      if not currentState.isPlaying then
-        if currentState.isEnding then
-          transitionGameState(gameState, "menu")
+      if not GameData.story.currentState.isPlaying then
+        if GameData.story.currentState.isEnding then
+          GameHelpers.transitionGameState(gameState, "menu")
         else
-          transitionGameState(gameState, "battle")
-          restartGame()
+          GameHelpers.transitionGameState(gameState, "battle")
+          GameHelpers.restartGame()
         end
       end
     elseif key == "escape" then
       print("[STORY] Skip dialogue key pressed")
       GameData.skipDialogue()
-      transitionGameState(gameState, "battle")
-      restartGame()
+      GameHelpers.transitionGameState(gameState, "battle")
+      GameHelpers.restartGame()
     end
   elseif gameState == "battle" then
     if key == "up" or key == "down" or key == "w" or key == "s" then
-      handleBattleInput()
+      GameLogic.handleBattleInput(battleState)
     elseif key == "return" or key == "space" then
       if battleState.phase == "select" and battleState.turn == "player" then
         local option = battleState.options[battleState.currentOption]
         print("[BATTLE MENU] Option chosen: " .. option.name)
         if option.name == "Attack" then
-          performPlayerAttack()
+          GameLogic.performPlayerAttack(player, enemy, battleState, animations, resources, GameLogic.positions, GameLogic.skillSystem, GameLogic.TimerSystem, GameData, currentGameLanguage, GAME_CONSTANTS, playerSettings)
         elseif option.name == "Defend" then
-          performPlayerDefend()
+          GameLogic.performPlayerDefend(player, enemy, battleState, animations, resources, GameLogic.positions, GameLogic.skillSystem, GameLogic.TimerSystem, GameData, currentGameLanguage, GAME_CONSTANTS)
         elseif option.name == "Special" then
-          performPlayerSpecial()
+          GameLogic.performPlayerSpecial(player, enemy, battleState, animations, resources, GameLogic.positions, GameLogic.skillSystem, GameLogic.TimerSystem, GameData, currentGameLanguage, GAME_CONSTANTS, playerSettings)
         elseif option.name == "Heal" then
-          performPlayerHeal()
+          GameLogic.performPlayerHeal(player, enemy, battleState, animations, resources, GameLogic.positions, GameLogic.skillSystem, GameData, currentGameLanguage, GAME_CONSTANTS)
         end
       end
     elseif key == "escape" then
-        handleBattlePause()
-    elseif key == "x" and currentState.isGrinding then -- New hotkey 'x' for exiting grind
-        exitGrindingMode()
+        GameHelpers.handleBattlePause()
+    elseif key == "x" and GameData.story.currentState.isGrinding then
+        GameHelpers.exitGrindingMode()
     end
-  elseif gameState == "pause" then 
+  elseif gameState == "pause" then
       if key == "up" or key == "w" then
-        local prevPauseOption = pauseState.currentOption
-        pauseState.currentOption = pauseState.currentOption - 1
-        if pauseState.currentOption < 1 then
-          pauseState.currentOption = #pauseState.options
-        end
-        if pauseState.currentOption ~= prevPauseOption then
-          print("[PAUSE MENU] Navigated menu: Up, selected option index: " .. pauseState.currentOption .. ", option text: " .. GameData.getText(currentGameLanguage, pauseState.options[pauseState.currentOption].textKey))
-        end
+        GameLogic.handlePauseInput(pauseState, "up", GameData, currentGameLanguage)
       elseif key == "down" or key == "s" then
-        local prevPauseOption = pauseState.currentOption
-        pauseState.currentOption = pauseState.currentOption + 1
-        if pauseState.currentOption > #pauseState.options then
-          pauseState.currentOption = 1
-        end
-        if pauseState.currentOption ~= prevPauseOption then
-          print("[PAUSE MENU] Navigated menu: Down, selected option index: " .. pauseState.currentOption .. ", option text: " .. GameData.getText(currentGameLanguage, pauseState.options[pauseState.currentOption].textKey))
-        end
+        GameLogic.handlePauseInput(pauseState, "down", GameData, currentGameLanguage)
       elseif key == "return" or key == "space" then
         local selectedPauseOption = pauseState.options[pauseState.currentOption]
         print("[PAUSE MENU] Option selected: " .. GameData.getText(currentGameLanguage, selectedPauseOption.textKey))
@@ -2937,44 +522,29 @@ function love.keypressed(key)
       end
   elseif gameState == "defeat" or gameState == "victory" then
     if key == "up" or key == "w" then
-      local prevResultOption = resultState.currentOption
-      resultState.currentOption = resultState.currentOption - 1
-      if resultState.currentOption < 1 then
-        resultState.currentOption = #resultState.options
-      end
-      if resultState.currentOption ~= prevResultOption then
-        print("[" .. gameState:upper() .. " MENU] Navigated menu: Up, selected option index: " .. resultState.currentOption .. ", option text: " .. GameData.getText(currentGameLanguage, resultState.options[resultState.currentOption].textKey))
-      end
+      GameLogic.handleResultInput(resultState, "up", GameData, currentGameLanguage)
     elseif key == "down" or key == "s" then
-      local prevResultOption = resultState.currentOption
-      resultState.currentOption = resultState.currentOption + 1
-      if resultState.currentOption > #resultState.options then
-        resultState.currentOption = 1
-      end
-      if resultState.currentOption ~= prevResultOption then
-        print("[" .. gameState:upper() .. " MENU] Navigated menu: Down, selected option index: " .. resultState.currentOption .. ", option text: " .. GameData.getText(currentGameLanguage, resultState.options[resultState.currentOption].textKey))
-      end
+      GameLogic.handleResultInput(resultState, "down", GameData, currentGameLanguage)
     elseif key == "return" or key == "space" then
       local selectedResultOption = resultState.options[resultState.currentOption]
       print("[" .. gameState:upper() .. " MENU] Option selected: " .. GameData.getText(currentGameLanguage, selectedResultOption.textKey))
       selectedResultOption.action()
     end
-    return
   elseif gameState == "options" then
     if key == "escape" then
-      transitionGameState(gameState, "menu")
+      GameHelpers.transitionGameState(gameState, "menu")
     elseif key == "return" or key == "space" then
-      handleOptionsInputReturn()
+      GameLogic.handleOptionsInputReturn(optionsState, GameData, currentGameLanguage, GameHelpers.transitionGameState, GameHelpers.applyResolutionChange)
     end
   elseif gameState == "storyPage" then
     if key == "escape" then
-      transitionGameState(gameState, "menu")
+      GameHelpers.transitionGameState(gameState, "menu")
       storyPageState.scrollPosition = 0
       print("[GAME STATE] Game state changed to 'menu' from storyPage")
     end
   elseif gameState == "aboutPage" then
     if key == "escape" then
-      transitionGameState(gameState, "menu")
+      GameHelpers.transitionGameState(gameState, "menu")
       aboutPageState.scrollPosition = 0
       print("[GAME STATE] Game state changed to 'menu' from aboutPage")
     end
@@ -3000,9 +570,9 @@ function love.keypressed(key)
                 if itemInSlot then
                     local itemData = GameData.items[itemInSlot.itemId]
                     if itemData and itemData.type == "equipment" then
-                        equipItem(inventoryState.selectedSlot)
+                        GameLogic.equipItem(inventoryState.selectedSlot)
                     elseif itemData and itemData.type == "consumable" then
-                        useItem(inventoryState.selectedSlot)
+                        GameLogic.useItem(inventoryState.selectedSlot)
                     end
                 end
             end
@@ -3036,7 +606,7 @@ function love.keypressed(key)
                 end
             elseif key == "return" or key == "space" then
                 if inventoryState.selectedEquipmentSlotKey and player.equipment[inventoryState.selectedEquipmentSlotKey] then
-                    unequipItem(inventoryState.selectedEquipmentSlotKey)
+                    GameLogic.unequipItem(inventoryState.selectedEquipmentSlotKey)
                 end
             end
         end
@@ -3044,28 +614,28 @@ function love.keypressed(key)
         -- Escape key to close inventory (applies to both focus states)
         if key == "escape" or key == "i" then
             if previousGameState then
-                transitionGameState(gameState, previousGameState)
+                GameHelpers.transitionGameState(gameState, previousGameState)
                 previousGameState = nil
             else
-                transitionGameState(gameState, "menu")
+                GameHelpers.transitionGameState(gameState, "menu")
             end
         end
     elseif gameState == "questLogScreen" then
         if key == "escape" then
             if previousGameState then
-                transitionGameState(gameState, previousGameState)
+                GameHelpers.transitionGameState(gameState, previousGameState)
                 previousGameState = nil
             else
-                transitionGameState(gameState, "menu")
+                GameHelpers.transitionGameState(gameState, "menu")
             end
         end
     elseif gameState == "statsScreen" then
         if key == "escape" then
             if previousGameState then
-                transitionGameState(gameState, previousGameState)
+                GameHelpers.transitionGameState(gameState, previousGameState)
                 previousGameState = nil
             else
-                transitionGameState(gameState, "menu")
+                GameHelpers.transitionGameState(gameState, "menu")
             end
         end
     end
@@ -3075,93 +645,59 @@ function love.keypressed(key)
       -- This is now handled by the escape key logic within inventoryScreen block
     elseif gameState == "battle" or gameState == "menu" or gameState == "questLogScreen" or gameState == "statsScreen" then
       previousGameState = gameState
-      transitionGameState(gameState, "inventoryScreen")
+      GameHelpers.transitionGameState(gameState, "inventoryScreen")
     end
   end
 
   if key == "j" then
     if gameState == "questLogScreen" then
         if previousGameState then
-            transitionGameState(gameState, previousGameState)
-            previousGameState = nil -- Clear it after use
+            GameHelpers.transitionGameState(gameState, previousGameState)
+            previousGameState = nil
         else
-            transitionGameState(gameState, "menu") -- Fallback to menu
+            GameHelpers.transitionGameState(gameState, "menu")
         end
-    elseif gameState == "menu" or gameState == "battle" or gameState == "options" or gameState == "levelSelect" or gameState == "storyPage" or gameState == "aboutPage" or gameState == "inventoryScreen" then -- Ensure inventoryScreen is also a valid state to open questlog from
-        previousGameState = gameState -- Store current state
-        transitionGameState(gameState, "questLogScreen")
+    elseif gameState == "menu" or gameState == "battle" or gameState == "options" or gameState == "levelSelect" or gameState == "storyPage" or gameState == "aboutPage" or gameState == "inventoryScreen" then
+        previousGameState = gameState
+        GameHelpers.transitionGameState(gameState, "questLogScreen")
     end
   end
 
   if key == "c" then
     if gameState == "statsScreen" then
         if previousGameState then
-            transitionGameState(gameState, previousGameState)
+            GameHelpers.transitionGameState(gameState, previousGameState)
             previousGameState = nil
         else
-            transitionGameState(gameState, "menu")
+            GameHelpers.transitionGameState(gameState, "menu")
         end
-    elseif gameState == "menu" or gameState == "battle" or gameState == "options" or gameState == "levelSelect" or gameState == "storyPage" or gameState == "aboutPage" or gameState == "inventoryScreen" or gameState == "questLogScreen" then -- States from which it can be opened
+    elseif gameState == "menu" or gameState == "battle" or gameState == "options" or gameState == "levelSelect" or gameState == "storyPage" or gameState == "aboutPage" or gameState == "inventoryScreen" or gameState == "questLogScreen" then
         previousGameState = gameState
-        transitionGameState(gameState, "statsScreen")
+        GameHelpers.transitionGameState(gameState, "statsScreen")
     end
   end
 
   if key == "p" then
-    if addItemToInventory("potion_health_1", 1) then
+    if GameLogic.addItemToInventory("potion_health_1", 1) then
         print("[CHEAT] Added 1 Health Potion to inventory.")
-        if gameState == "battle" or gameState == "inventoryScreen" or gameState == "menu" then
-            uiMessage = "Added Health Potion!"
-            uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-        end
+        uiMessage = GameData.getText(currentGameLanguage, "cheat_potion_added")
+        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
     else
         print("[CHEAT] Failed to add Health Potion (Inventory full?).")
-        if gameState == "battle" or gameState == "inventoryScreen" or gameState == "menu" then
-            uiMessage = "Failed to add potion! Inventory full?"
-            uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-        end
+        uiMessage = GameData.getText(currentGameLanguage, "cheat_potion_failed")
+        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
     end
   end
-end
-function handleOptionsInputReturn()
-  local option = optionsState.options[optionsState.currentOption]
-  if option.type == "toggle" then
-    local targetState = option.targetState or audioState
-    local oldState = targetState[option.state]
-    targetState[option.state] = not oldState
-    print("[OPTIONS MENU] Toggled option: " .. GameData.getText(currentGameLanguage, option.textKey) .. ", new state: " .. tostring(targetState[option.state]))
-    if option.state == "isMutedBGM" then
-      transitionGameState(gameState, gameState)
-    elseif option.state == "isFullScreen" then
-        applyResolutionChange()
-    end
-  elseif option.action then
-    option.action()
-    print("[OPTIONS MENU] Option selected: " .. GameData.getText(currentGameLanguage, option.textKey))
-  end
-end
-local function isPointInRect(x, y, rect)
-    if not rect or not rect.x or not rect.y or not rect.width or not rect.height then
-        return false
-    end
-    return x >= rect.x and x <= rect.x + rect.width and
-           y >= rect.y and y <= rect.y + rect.height
-end
-
-function isInArray(array, value)
-    for _, v in ipairs(array) do
-        if v == value then return true end
-    end
-    return false
 end
 
 function love.mousepressed(x, y, button, istouch, presses)
     if button ~= 1 then return end
     local handled = false
+
     if gameState == "menu" then
         if menuState.buttonAreas then
             for i, area in ipairs(menuState.buttonAreas) do
-                if isPointInRect(x, y, area) then
+                if GameLogic.isPointInRect(x, y, area) then
                     menuState.currentOption = i
                     local option = menuState.options[i]
                     print("[MENU] Option clicked: " .. GameData.getText(currentGameLanguage, option.textKey))
@@ -3174,29 +710,27 @@ function love.mousepressed(x, y, button, istouch, presses)
     elseif gameState == "levelSelect" then
         local totalOptions = menuState.levelSelect.maxLevel + #menuState.levelSelect.grindingLevelIds
         if menuState.levelSelect.buttonAreas then
-            for i = 1, totalOptions do -- Iterate through all possible buttons
+            for i = 1, totalOptions do
                 local buttonRect = menuState.levelSelect.buttonAreas[i]
-                if buttonRect and isPointInRect(x, y, buttonRect) then
-                    menuState.levelSelect.currentLevel = i -- Set currentLevel to the actual index
+                if buttonRect and GameLogic.isPointInRect(x, y, buttonRect) then
+                    menuState.levelSelect.currentLevel = i
 
                     if i >= 1 and i <= menuState.levelSelect.maxLevel then
-                        -- Regular level selected
-                        currentState.isGrinding = false
+                        GameData.story.currentState.isGrinding = false
                         menuState.levelSelect.selectedGrindingLevelKey = nil
                         print("[LEVEL SELECT] Regular Level " .. i .. " selected by mouse")
                         GameData.startLevelDialogue(i)
-                        transitionGameState(gameState, "story")
+                        GameHelpers.transitionGameState(gameState, "story")
                     elseif i > menuState.levelSelect.maxLevel and i <= totalOptions then
-                        -- Grinding level selected
                         local grindingIndex = i - menuState.levelSelect.maxLevel
                         local grindingId = menuState.levelSelect.grindingLevelIds[grindingIndex]
                         if grindingId then
-                            currentState.isGrinding = true
-                            currentState.currentGrindingLevelId = grindingId
+                            GameData.story.currentState.isGrinding = true
+                            GameData.story.currentState.currentGrindingLevelId = grindingId
                             menuState.levelSelect.selectedGrindingLevelKey = grindingId
-                            print("[LEVEL SELECT] Grinding Level " .. grindingId .. " selected by mouse. isGrinding: " .. tostring(currentState.isGrinding))
-                            restartGame()
-                            transitionGameState(gameState, "battle")
+                            print("[LEVEL SELECT] Grinding Level " .. grindingId .. " selected by mouse. isGrinding: " .. tostring(GameData.story.currentState.isGrinding))
+                            GameHelpers.restartGame()
+                            GameHelpers.transitionGameState(gameState, "battle")
                         end
                     end
                     handled = true
@@ -3205,12 +739,222 @@ function love.mousepressed(x, y, button, istouch, presses)
             end
         end
 
+        if menuState.levelSelect.backButtonArea then
+          local backButtonRect = menuState.levelSelect.backButtonArea
+          if GameLogic.isPointInRect(x, y, backButtonRect) then
+            GameHelpers.transitionGameState(gameState, "menu")
+            print("[LEVEL SELECT] Back button clicked, returning to main menu")
+            handled = true
+          end
+        end
+    elseif gameState == "battle" and not pauseState.isPaused then
+        if battleState.buttonAreas then
+            for i, area in ipairs(battleState.buttonAreas) do
+                if GameLogic.isPointInRect(x, y, area) and battleState.phase == "select" then
+                    battleState.currentOption = i
+                    local option = battleState.options[i]
+                    print("[BATTLE MENU] Option clicked: " .. option.name)
+                    if option.name == "Attack" then
+                        GameLogic.performPlayerAttack()
+                    elseif option.name == "Defend" then
+                        GameLogic.performPlayerDefend()
+                    elseif option.name == "Special" then
+                        GameLogic.performPlayerSpecial()
+                    elseif option.name == "Heal" then
+                        GameLogic.performPlayerHeal()
+                    end
+                    handled = true
+                    break
+                end
+            end
+        end
+        if GameData.story.currentState.isGrinding and battleState.leaveGrindingButtonArea and GameLogic.isPointInRect(x, y, battleState.leaveGrindingButtonArea) then
+            GameHelpers.exitGrindingMode()
+            handled = true
+        end
+    elseif gameState == "pause" then
+        if pauseState.buttonAreas then
+            for i, area in ipairs(pauseState.buttonAreas) do
+                if GameLogic.isPointInRect(x, y, area) then
+                    pauseState.currentOption = i
+                    local option = pauseState.options[i]
+                    print("[PAUSE MENU] Option clicked: " .. GameData.getText(currentGameLanguage, option.textKey))
+                    option.action()
+                    handled = true
+                    break
+                end
+            end
+        end
+    elseif gameState == "victory" or gameState == "defeat" then
+      if resultState.buttonAreas then
+        for i, buttonRect in ipairs(resultState.buttonAreas) do
+          if GameLogic.isPointInRect(x, y, buttonRect) then
+            resultState.currentOption = i
+            local option = resultState.options[i]
+            print("[" .. gameState:upper() .. " MENU] Option clicked: " .. GameData.getText(currentGameLanguage, option.textKey))
+            option.action()
+            handled = true
+            break
+          end
+        end
+      end
+    elseif gameState == "options" then
+      if optionsState.buttonAreas then
+        for i, buttonRect in ipairs(optionsState.buttonAreas) do
+          if GameLogic.isPointInRect(x, y, buttonRect) then
+            optionsState.currentOption = i
+            local option = optionsState.options[i]
+            print("[OPTIONS MENU] Option clicked: " .. GameData.getText(currentGameLanguage, option.textKey))
+            if option.type == "toggle" or option.type == "font_size" or option.type == "resolution" then
+              GameLogic.handleOptionsInputReturn(optionsState, GameData, currentGameLanguage, GameHelpers.transitionGameState, GameHelpers.applyResolutionChange)
+            elseif option.action then
+              option.action()
+            end
+            handled = true
+            break
+          end
+        end
+      end
+      if optionsState.options[optionsState.currentOption].type == "language" and optionsState.languageButtonAreas then
+        for areaType, areaRect in pairs(optionsState.languageButtonAreas) do
+          if GameLogic.isPointInRect(x, y, areaRect) then
+            if areaType == "left" then
+              local currentOption = optionsState.options[optionsState.currentOption]
+              currentOption.currentOption = currentOption.currentOption - 1
+              if currentOption.currentOption < 1 then
+                currentOption.currentOption = #currentOption.languageOptions
+              end
+              currentGameLanguage = currentOption.languageOptions[currentOption.currentOption]
+              GameData.setCurrentLanguage(currentGameLanguage)
+              storyPageState.storyText = GameData.getText(currentGameLanguage, "game_full_story")
+              aboutPageState.storyText = GameData.getText(currentGameLanguage, "about_project")
+              aboutPageState.staffText = GameData.getText(currentGameLanguage, "about_staff")
+              print("[OPTIONS MENU] Language changed to: " .. currentGameLanguage .. " (Left Arrow Click)")
+            elseif areaType == "right" then
+              local currentOption = optionsState.options[optionsState.currentOption]
+              currentOption.currentOption = currentOption.currentOption + 1
+              if currentOption.currentOption > #currentOption.languageOptions then
+                currentOption.currentOption = 1
+              end
+              currentGameLanguage = currentOption.languageOptions[currentOption.currentOption]
+              GameData.setCurrentLanguage(currentGameLanguage)
+              storyPageState.storyText = GameData.getText(currentGameLanguage, "game_full_story")
+              aboutPageState.storyText = GameData.getText(currentGameLanguage, "about_project")
+              aboutPageState.staffText = GameData.getText(currentGameLanguage, "about_staff")
+              print("[OPTIONS MENU] Language changed to: " .. currentGameLanguage .. " (Right Arrow Click)")
+            end
+            handled = true
+            break
+          end
+        end
+      end
+        if optionsState.options[optionsState.currentOption].type == "resolution" and optionsState.resolutionButtonAreas then
+            for areaType, areaRect in pairs(optionsState.resolutionButtonAreas) do
+                if GameLogic.isPointInRect(x, y, areaRect) then
+                    if areaType == "left" then
+                        local currentOption = optionsState.options[optionsState.currentOption].currentOption
+                        currentOption = currentOption - 1
+                        if currentOption < 1 then
+                            currentOption = #availableResolutions
+                        end
+                        optionsState.options[optionsState.currentOption].currentOption = currentOption
+                        currentResolutionIndex = currentOption
+                        GameHelpers.applyResolutionChange()
+                        print("[OPTIONS MENU] Resolution changed (Left Arrow Click)")
+                    elseif areaType == "right" then
+                        local currentOption = optionsState.options[optionsState.currentOption].currentOption
+                        currentOption = currentOption + 1
+                        if currentOption > #availableResolutions then
+                            currentOption = 1
+                        end
+                        optionsState.options[optionsState.currentOption].currentOption = currentOption
+                        currentResolutionIndex = currentOption
+                        GameHelpers.applyResolutionChange()
+                        print("[OPTIONS MENU] Resolution changed (Right Arrow Click)")
+                    end
+                    handled = true
+                    break
+                end
+            end
+        end
+        if optionsState.options[optionsState.currentOption].type == "font_size" and optionsState.fontSizeButtonAreas then
+            for areaType, areaRect in pairs(optionsState.fontSizeButtonAreas) do
+                if GameLogic.isPointInRect(x, y, areaRect) then
+                    if areaType == "left" then
+                        local currentOption = optionsState.options[optionsState.currentOption]
+                        currentOption.currentOption = currentOption.currentOption - 1
+                        if currentOption.currentOption < 1 then
+                            currentOption.currentOption = #currentOption.fontSizeOptions
+                        end
+                        GAME_CONSTANTS.currentFontSizeIndex = currentOption.currentOption
+                        GameHelpers.applyFontSizeChange()
+                        print("[OPTIONS MENU] Font size changed (Left Arrow Click)")
+                    elseif areaType == "right" then
+                        local currentOption = optionsState.options[optionsState.currentOption]
+                        currentOption.currentOption = currentOption.currentOption + 1
+                        if currentOption.currentOption > #currentOption.fontSizeOptions then
+                            currentOption.currentOption = 1
+                        end
+                        GAME_CONSTANTS.currentFontSizeIndex = currentOption.currentOption
+                        GameHelpers.applyFontSizeChange()
+                        print("[OPTIONS MENU] Font size changed (Right Arrow Click)")
+                    end
+                    handled = true
+                    break
+                end
+            end
+        end
+      if optionsState.backButtonArea then
+        local backButtonRect = optionsState.backButtonArea
+        if GameLogic.isPointInRect(x, y, backButtonRect) then
+          GameHelpers.transitionGameState(gameState, "menu")
+          print("[OPTIONS MENU] Back button clicked")
+          handled = true
+        end
+      end
+    elseif gameState == "storyPage" then
+        if storyPageState.backButtonArea then
+          local backButtonRect = storyPageState.backButtonArea
+          if GameLogic.isPointInRect(x, y, backButtonRect) then
+            GameHelpers.transitionGameState(gameState, "menu")
+            storyPageState.scrollPosition = 0
+            print("[STORY PAGE] Back button clicked, returning to main menu")
+            handled = true
+          end
+        end
+    elseif gameState == "aboutPage" then
+        if aboutPageState.backButtonArea then
+          local backButtonRect = aboutPageState.backButtonArea
+          if GameLogic.isPointInRect(x, y, backButtonRect) then
+            GameHelpers.transitionGameState(gameState, "menu")
+            aboutPageState.scrollPosition = 0
+            print("[ABOUT PAGE] Back button clicked, returning to main menu")
+            handled = true
+          end
+        end
+    elseif gameState == "story" then
+      local windowWidth = love.graphics.getWidth()
+      local windowHeight = love.graphics.getHeight()
+      local bottomMargin = windowHeight * 0.05
+      local dialogBoxHeight = windowHeight * 0.2
+      local dialogBoxWidth = windowWidth * 0.8
+      local dialogBoxX = (windowWidth - dialogBoxWidth) / 2
+      local dialogBoxY = windowHeight - dialogBoxHeight - bottomMargin
+
+      if GameLogic.isPointInRect(x, y, {x = dialogBoxX, y = dialogBoxY, width = dialogBoxWidth, height = dialogBoxHeight}) then
+        if GameData.isTextComplete() then
+            GameLogic.handleStoryInput(0.61, GameData.story.currentState, GameHelpers.transitionGameState, GameHelpers.restartGame)
+            print("[STORY] Dialogue box clicked, continuing story")
+            handled = true
+        end
+      end
+    elseif gameState == "inventoryScreen" then
         -- Mouse interaction for equipment slots
         if inventoryState.equipmentSlotDisplayAreas then
             for slotKey, area in pairs(inventoryState.equipmentSlotDisplayAreas) do
-                if isPointInRect(x, y, area) then
+                if GameLogic.isPointInRect(x, y, area) then
                     if inventoryState.currentFocus == "equipment" and inventoryState.selectedEquipmentSlotKey == slotKey and player.equipment[slotKey] then
-                        unequipItem(slotKey) -- Double-click/second click on selected equipped item
+                        GameLogic.unequipItem(slotKey)
                     else
                         inventoryState.currentFocus = "equipment"
                         inventoryState.selectedEquipmentSlotKey = slotKey
@@ -3230,15 +974,14 @@ function love.mousepressed(x, y, button, istouch, presses)
                 local itemY = inventoryState.gridStartY + row * (inventoryState.slotHeight + inventoryState.slotPadding)
                 local area = {x = itemX, y = itemY, width = inventoryState.slotWidth, height = inventoryState.slotHeight}
 
-                if isPointInRect(x, y, area) then
+                if GameLogic.isPointInRect(x, y, area) then
                     local itemInSlot = player.inventory[i]
                     if inventoryState.currentFocus == "inventory" and inventoryState.selectedSlot == i and itemInSlot then
-                        -- This is a second click on an already selected inventory item
                         local itemData = GameData.items[itemInSlot.itemId]
                         if itemData and itemData.type == "equipment" then
-                            equipItem(i)
+                            GameLogic.equipItem(i)
                         elseif itemData and itemData.type == "consumable" then
-                            useItem(i) -- Existing logic
+                            GameLogic.useItem(i)
                         end
                     else
                         inventoryState.currentFocus = "inventory"
@@ -3249,217 +992,62 @@ function love.mousepressed(x, y, button, istouch, presses)
                 end
             end
         end
+    elseif gameState == "questLogScreen" then
+        -- Tab clicks
+        if GameLogic.isPointInRect(x, y, questLogState.tabAreas.active) then
+            questLogState.currentTab = "active"
+            questLogState.selectedQuestIndex = 1
+            questLogState.activeQuestScrollOffset = 0
+            local tempActiveQuests = {}
+            if player.activeQuests then
+                for id, _ in pairs(player.activeQuests) do table.insert(tempActiveQuests, {id=id}) end
+            end
+            table.sort(tempActiveQuests, function(a,b) return a.id < b.id end)
+            questLogState.selectedQuestId = (#tempActiveQuests > 0) and tempActiveQuests[1].id or nil
+            handled = true
+        elseif GameLogic.isPointInRect(x, y, questLogState.tabAreas.completed) then
+            questLogState.currentTab = "completed"
+            questLogState.selectedQuestIndex = 1
+            questLogState.completedQuestScrollOffset = 0
+            local tempCompletedQuests = {}
+            if player.completedQuests then
+                for id, _ in pairs(player.completedQuests) do table.insert(tempCompletedQuests, {id=id}) end
+            end
+            table.sort(tempCompletedQuests, function(a,b) return a.id < b.id end)
+            questLogState.selectedQuestId = (#tempCompletedQuests > 0) and tempCompletedQuests[1].id or nil
+            handled = true
+        end
 
-        if menuState.levelSelect.backButtonArea then
-          local backButtonRect = menuState.levelSelect.backButtonArea
-          if isPointInRect(x, y, backButtonRect) then
-            transitionGameState(gameState, "menu")
-            print("[LEVEL SELECT] Back button clicked, returning to main menu")
-            handled = true
-          end
-        end
-    elseif gameState == "battle" and not pauseState.isPaused then
-        if battleState.buttonAreas then
-            for i, area in ipairs(battleState.buttonAreas) do
-                if isPointInRect(x, y, area) and battleState.phase == "select" then
-                    battleState.currentOption = i
-                    local option = battleState.options[i]
-                    print("[BATTLE MENU] Option clicked: " .. option.name)
-                    if option.name == "Attack" then
-                        performPlayerAttack()
-                    elseif option.name == "Defend" then
-                        performPlayerDefend()
-                    elseif option.name == "Special" then
-                        performPlayerSpecial()
-                    elseif option.name == "Heal" then
-                        performPlayerHeal()
-                    end
+        -- Quest list clicks
+        if not handled and GameLogic.isPointInRect(x, y, questLogState.questListArea) then
+            local listX = questLogState.questListArea.x
+            local listY = questLogState.questListArea.y
+            local currentScrollOffset = (questLogState.currentTab == "active") and questLogState.activeQuestScrollOffset or questLogState.completedQuestScrollOffset
+            local questsToDisplay = {}
+            if questLogState.currentTab == "active" then
+                if player.activeQuests then
+                    for id, data in pairs(player.activeQuests) do table.insert(questsToDisplay, {id = id, data = data}) end
+                end
+            else
+                if player.completedQuests then
+                    for id, _ in pairs(player.completedQuests) do table.insert(questsToDisplay, {id = id, data = GameData.quests[id]}) end
+                end
+            end
+            table.sort(questsToDisplay, function(a,b) return a.id < b.id end)
+
+            for i, questEntry in ipairs(questsToDisplay) do
+                local itemY = listY + (i - 1 - currentScrollOffset) * questLogState.lineHeight + questLogState.padding
+                local itemArea = {x = listX, y = itemY - questLogState.padding/2, width = questLogState.questListArea.width, height = questLogState.lineHeight}
+                if GameLogic.isPointInRect(x, y, itemArea) then
+                    questLogState.selectedQuestId = questEntry.id
+                    questLogState.selectedQuestIndex = i
                     handled = true
                     break
                 end
             end
         end
-        if currentState.isGrinding and battleState.leaveGrindingButtonArea and isPointInRect(x, y, battleState.leaveGrindingButtonArea) then
-            exitGrindingMode()
-            handled = true -- Assuming 'handled' variable is used to prevent other clicks
-        end
-    elseif gameState == "pause" then
-        if pauseState.buttonAreas then
-            for i, area in ipairs(pauseState.buttonAreas) do
-                if isPointInRect(x, y, area) then
-                    pauseState.currentOption = i
-                    local option = pauseState.options[i]
-                    print("[PAUSE MENU] Option clicked: " .. GameData.getText(currentGameLanguage, option.textKey))
-                    option.action()
-                    handled = true
-                    break
-                end
-            end
-        end
-    elseif gameState == "victory" or gameState == "defeat" then
-      if resultState.buttonAreas then
-        for i, buttonRect in ipairs(resultState.buttonAreas) do
-          if isPointInRect(x, y, buttonRect) then
-            resultState.currentOption = i
-            local option = resultState.options[i]
-            print("[" .. gameState:upper() .. " MENU] Option clicked: " .. GameData.getText(currentGameLanguage, option.textKey))
-            option.action()
-            handled = true
-            break
-          end
-        end
-      end
-    elseif gameState == "options" then
-      if optionsState.buttonAreas then
-        for i, buttonRect in ipairs(optionsState.buttonAreas) do
-          if isPointInRect(x, y, buttonRect) then
-            optionsState.currentOption = i
-            local option = optionsState.options[i]
-            print("[OPTIONS MENU] Option clicked: " .. GameData.getText(currentGameLanguage, option.textKey))
-            if option.type == "toggle" or option.type == "font_size" or option.type == "resolution" then
-              handleOptionsInputReturn()
-            elseif option.action then
-              option.action()
-            end
-            handled = true
-            break
-          end
-        end
-      end
-      if optionsState.options[optionsState.currentOption].type == "language" and optionsState.languageButtonAreas then
-        for areaType, areaRect in pairs(optionsState.languageButtonAreas) do
-          if isPointInRect(x, y, areaRect) then
-            if areaType == "left" then
-              local currentOption = optionsState.options[optionsState.currentOption]
-              currentOption.currentOption = currentOption.currentOption - 1
-              if currentOption.currentOption < 1 then
-                currentOption.currentOption = #currentOption.languageOptions
-              end
-              currentGameLanguage = currentOption.languageOptions[currentOption.currentOption]
-              setCurrentLanguage(currentGameLanguage)
-              storyPageState.storyText = GameData.getText(currentGameLanguage, "game_full_story")
-              aboutPageState.storyText = GameData.getText(currentGameLanguage, "about_project")
-              aboutPageState.staffText = GameData.getText(currentGameLanguage, "about_staff")
-              print("[OPTIONS MENU] Language changed to: " .. currentGameLanguage .. " (Left Arrow Click)")
-            elseif areaType == "right" then
-              local currentOption = optionsState.options[optionsState.currentOption]
-              currentOption.currentOption = currentOption.currentOption + 1
-              if currentOption.currentOption > #currentOption.languageOptions then
-                currentOption.currentOption = 1
-              end
-              currentGameLanguage = currentOption.languageOptions[currentOption.currentOption]
-              setCurrentLanguage(currentGameLanguage)
-              storyPageState.storyText = GameData.getText(currentGameLanguage, "game_full_story")
-              aboutPageState.storyText = GameData.getText(currentGameLanguage, "about_project")
-              aboutPageState.staffText = GameData.getText(currentGameLanguage, "about_staff")
-              print("[OPTIONS MENU] Language changed to: " .. currentGameLanguage .. " (Right Arrow Click)")
-            end
-            handled = true
-            break
-          end
-        end
-      end
-        if optionsState.options[optionsState.currentOption].type == "resolution" and optionsState.resolutionButtonAreas then
-            for areaType, areaRect in pairs(optionsState.resolutionButtonAreas) do
-                if isPointInRect(x, y, areaRect) then
-                    if areaType == "left" then
-                        local currentOption = optionsState.options[optionsState.currentOption].currentOption
-                        currentOption = currentOption - 1
-                        if currentOption < 1 then
-                            currentOption = #availableResolutions
-                        end
-                        optionsState.options[optionsState.currentOption].currentOption = currentOption
-                        currentResolutionIndex = currentOption
-                        applyResolutionChange()
-                        print("[OPTIONS MENU] Resolution changed (Left Arrow Click)")
-                    elseif areaType == "right" then
-                        local currentOption = optionsState.options[optionsState.currentOption].currentOption
-                        currentOption = currentOption + 1
-                        if currentOption > #availableResolutions then
-                            currentOption = 1
-                        end
-                        optionsState.options[optionsState.currentOption].currentOption = currentOption
-                        currentResolutionIndex = currentOption
-                        applyResolutionChange()
-                        print("[OPTIONS MENU] Resolution changed (Right Arrow Click)")
-                    end
-                    handled = true
-                    break
-                end
-            end
-        end
-        if optionsState.options[optionsState.currentOption].type == "font_size" and optionsState.fontSizeButtonAreas then
-            for areaType, areaRect in pairs(optionsState.fontSizeButtonAreas) do
-                if isPointInRect(x, y, areaRect) then
-                    if areaType == "left" then
-                        local currentOption = optionsState.options[optionsState.currentOption]
-                        currentOption.currentOption = currentOption.currentOption - 1
-                        if currentOption.currentOption < 1 then
-                            currentOption.currentOption = #currentOption.fontSizeOptions
-                        end
-                        GAME_CONSTANTS.currentFontSizeIndex = currentOption.currentOption
-                        applyFontSizeChange()
-                        print("[OPTIONS MENU] Font size changed (Left Arrow Click)")
-                    elseif areaType == "right" then
-                        local currentOption = optionsState.options[optionsState.currentOption]
-                        currentOption.currentOption = currentOption.currentOption + 1
-                        if currentOption.currentOption > #currentOption.fontSizeOptions then
-                            currentOption.currentOption = 1
-                        end
-                        GAME_CONSTANTS.currentFontSizeIndex = currentOption.currentOption
-                        applyFontSizeChange()
-                        print("[OPTIONS MENU] Font size changed (Right Arrow Click)")
-                    end
-                    handled = true
-                    break
-                end
-            end
-        end
-      if optionsState.backButtonArea then
-        local backButtonRect = optionsState.backButtonArea
-        if isPointInRect(x, y, backButtonRect) then
-          transitionGameState(gameState, "menu")
-          print("[OPTIONS MENU] Back button clicked")
-          handled = true
-        end
-      end
-    elseif gameState == "storyPage" then
-        if storyPageState.backButtonArea then
-          local backButtonRect = storyPageState.backButtonArea
-          if isPointInRect(x, y, backButtonRect) then
-            transitionGameState(gameState, "menu")
-            storyPageState.scrollPosition = 0
-            print("[STORY PAGE] Back button clicked, returning to main menu")
-            handled = true
-          end
-        end
-    elseif gameState == "aboutPage" then
-        if aboutPageState.backButtonArea then
-          local backButtonRect = aboutPageState.backButtonArea
-          if isPointInRect(x, y, backButtonRect) then
-            transitionGameState(gameState, "menu")
-            aboutPageState.scrollPosition = 0
-            print("[ABOUT PAGE] Back button clicked, returning to main menu")
-            handled = true
-          end
-        end
-    elseif gameState == "story" then
-      local windowWidth = love.graphics.getWidth()
-      local windowHeight = love.graphics.getHeight()
-      local bottomMargin = windowHeight * 0.05
-      local dialogBoxHeight = windowHeight * 0.2
-      local dialogBoxWidth = windowWidth * 0.8
-      local dialogBoxX = (windowWidth - dialogBoxWidth) / 2
-      local dialogBoxY = windowHeight - dialogBoxHeight - bottomMargin
-      
-      if isPointInRect(x, y, {x = dialogBoxX, y = dialogBoxY, width = dialogBoxWidth, height = dialogBoxHeight}) then
-        if GameData.isTextComplete() then
-            handleStoryInput(0.61)
-            print("[STORY] Dialogue box clicked, continuing story")
-            handled = true
-        end
-      end
     end
+
     if handled and not audioState.isMutedSFX then
         if resources.sounds.menuSelect then
             resources.sounds.menuSelect:play()
@@ -3468,1468 +1056,7 @@ function love.mousepressed(x, y, button, istouch, presses)
         end
     end
 end
+
 function love.touchpressed(id, x, y)
     love.mousepressed(x, y, 1, true, 1)
-end
-function restartGame()
-print("[GAME] Restarting game...")
-player.hp = player.maxHp
-player.mp = player.maxMp
-player.isDefending = false
-player.combo = 0
-print("[GAME] Player settings reset")
-
-local currentEnemyDefinition
-local enemyDisplayNameKey
-local enemyImageKey
-local enemyAttackImageKey -- To store the specific attack image key
-
-if currentState.isGrinding and currentState.currentGrindingLevelId then
-    print("[GAME] Setting up grinding level: " .. currentState.currentGrindingLevelId)
-    local grindingLevelData = GameData.grindingLevels[currentState.currentGrindingLevelId]
-    if not grindingLevelData then
-        print("[ERROR] Failed to load grinding level data for ID: " .. currentState.currentGrindingLevelId)
-        -- Fallback to a default or handle error appropriately
-        return
-    end
-    if not grindingLevelData.enemyPool or #grindingLevelData.enemyPool == 0 then
-        print("[ERROR] Grinding level " .. currentState.currentGrindingLevelId .. " has an empty or undefined enemyPool.")
-        -- Fallback or error
-        return
-    end
-    local randomEnemyKey = grindingLevelData.enemyPool[math.random(#grindingLevelData.enemyPool)]
-    currentEnemyDefinition = enemyData[randomEnemyKey]
-    if not currentEnemyDefinition then
-        print("[ERROR] Failed to load enemy data for key: " .. randomEnemyKey .. " from grinding pool.")
-        return
-    end
-    enemyImageKey = currentEnemyDefinition.image
-    enemyAttackImageKey = currentEnemyDefinition.attackImage or currentEnemyDefinition.image -- Fallback for attack image
-    enemyDisplayNameKey = currentEnemyDefinition.displayNameKey
-    print("[GAME] Selected enemy for grinding: " .. randomEnemyKey .. " (Image: " .. enemyImageKey .. ", AttackImage: " .. (enemyAttackImageKey or "N/A") .. ")")
-else
-    print("[GAME] Setting up regular level: " .. menuState.levelSelect.currentLevel)
-    currentEnemyDefinition = enemyData[menuState.levelSelect.currentLevel]
-    if not currentEnemyDefinition then
-        print("[ERROR] Failed to load enemy data for regular level: " .. tostring(menuState.levelSelect.currentLevel))
-        return
-    end
-    enemyImageKey = currentEnemyDefinition.image
-    enemyAttackImageKey = currentEnemyDefinition.attackImage or currentEnemyDefinition.image
-    enemyDisplayNameKey = currentEnemyDefinition.displayNameKey
-    print("[GAME] Enemy for regular level " .. menuState.levelSelect.currentLevel .. ": Image: " .. enemyImageKey .. ", AttackImage: " .. (enemyAttackImageKey or "N/A"))
-end
-
-enemy = {
-  x = positions.enemy.x,
-  y = positions.enemy.y,
-  image = resources.images[enemyImageKey],
-  hp = validateNumber(currentEnemyDefinition.hp, GAME_CONSTANTS.HP.MIN, GAME_CONSTANTS.HP.MAX, GAME_CONSTANTS.HP.BASE),
-  maxHp = validateNumber(currentEnemyDefinition.maxHp, GAME_CONSTANTS.HP.MIN, GAME_CONSTANTS.HP.MAX, GAME_CONSTANTS.HP.BASE),
-  attack = validateNumber(currentEnemyDefinition.attack, 1, math.huge, 10),
-  defense = validateNumber(currentEnemyDefinition.defense, 0, math.huge, 5),
-  critRate = validateNumber(currentEnemyDefinition.critRate, 0, GAME_CONSTANTS.MAX_CRIT_RATE, GAME_CONSTANTS.BASE_CRIT_RATE),
-  critDamage = validateNumber(currentEnemyDefinition.critDamage, 1, GAME_CONSTANTS.MAX_CRIT_DAMAGE, GAME_CONSTANTS.BASE_CRIT_DAMAGE),
-  isDefending = false,
-  status = {},
-  combo = 0,
-  displayNameKey = enemyDisplayNameKey,
-  attackImageKey = enemyAttackImageKey -- Store the actual key for attack animation
-}
-
-if currentState.isGrinding then
-    print("[GAME] Enemy settings loaded for grinding level " .. currentState.currentGrindingLevelId)
-else
-    print("[GAME] Enemy settings loaded for regular level " .. menuState.levelSelect.currentLevel)
-end
-
-battleState = {
-      phase = "select",
-      turn = "player",
-      message = GameData.getText(currentGameLanguage, "battle_start"),
-      messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION,
-      options = {
-          {name = "Attack", description = "Deal damage to enemy"},
-          {name = "Defend", description = "Reduce incoming damage"},
-          {name = "Special", description = "Powerful attack with delay"},
-          {name = "Heal", description = "Restore health"},
-      },
-      currentOption = 1,
-      buttonAreas = {},
-      effects = {},
-      victoryTriggered = false,
-      defeatTriggered = false,
-      leaveGrindingButtonArea = nil
-  }
-  for _, skill in pairs(skillSystem) do
-    skill.cooldown = 0
-  end
-  print("[GAME] Battle state reset")
-  animations = {
-      player = {
-          current = "stand",
-          timer = 0,
-          x = positions.player.x,
-          y = positions.player.y,
-          originalX = positions.player.x
-      },
-      enemy = {
-          current = "stand",
-          timer = 0,
-          x = positions.enemy.x,
-          y = positions.enemy.y,
-          originalX = positions.enemy.x
-      },
-      effects = {}
-  }
-  print("[GAME] Animations reset")
-transitionGameState(gameState, "battle")
-pauseState.isPaused = false
-end
-local function calculateHeal(character)
-  local healAmount = math.floor(character.maxHp * GAME_CONSTANTS.HP.HEAL_PERCENT)
-  return validateNumber(healAmount, 1, character.maxHp, 1)
-end
-local function calculateDamage(attacker, defender)
-    local attack = validateNumber(attacker.attack, 1, 9999, GAME_CONSTANTS.MIN_DAMAGE)
-    local defense = validateNumber(defender.defense, 0, 9999, 0)
-    local baseDamage = attack * (GAME_CONSTANTS.DEFENSE_SCALING / (GAME_CONSTANTS.DEFENSE_SCALING + defense))
-    local randomMod = 1 + math.random(
-        GAME_CONSTANTS.DAMAGE_RANDOM_MIN * 100,
-        GAME_CONSTANTS.DAMAGE_RANDOM_MAX * 100
-    ) / 100
-    local damage = baseDamage * randomMod
-    local critRate = validateNumber(attacker.critRate, 0, GAME_CONSTANTS.MAX_CRIT_RATE, GAME_CONSTANTS.BASE_CRIT_RATE)
-    local isCrit = math.random(1, 100) <= critRate
-    if isCrit then
-        local critDmg = validateNumber(attacker.critDamage, 1, GAME_CONSTANTS.MAX_CRIT_DAMAGE, GAME_CONSTANTS.BASE_CRIT_DAMAGE)
-        damage = damage * critDmg
-    end
-    damage = validateNumber(
-        math.floor(damage),
-        GAME_CONSTANTS.MIN_DAMAGE,
-        attack * GAME_CONSTANTS.MAX_DAMAGE_MULTIPLIER,
-        GAME_CONSTANTS.MIN_DAMAGE
-    )
-    if attacker == player and playerSettings.isCheatMode then
-        damage = defender.hp + 1000
-    end
-    if defender == player and playerSettings.isInfiniteHP then
-        damage = 0
-        print("[CHEAT] Player took 0 damage (Infinite HP active).")
-    end
-    return damage, isCrit
-end
-
-function grantExp(amount)
-    player.exp = player.exp + amount
-    battleState.message = GameData.getText(currentGameLanguage, "battle_msg_exp_gain", {exp = amount})
-    battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-    print("[GAME] Player gained " .. amount .. " EXP. Current EXP: " .. player.exp)
-    checkLevelUp()
-end
-
-function checkLevelUp()
-    while player.exp >= player.expToNextLevel do
-        player.exp = player.exp - player.expToNextLevel
-        player.level = player.level + 1
-        player.expToNextLevel = math.floor(player.expToNextLevel * 1.5)
-        
-        player.maxHp = player.maxHp + 10
-        player.hp = player.hp + 10
-        player.maxMp = player.maxMp + 5
-        player.mp = player.mp + 5
-        player.attack = player.attack + 2
-        player.defense = player.defense + 1
-        player.critRate = math.min(GAME_CONSTANTS.MAX_CRIT_RATE, player.critRate + 0.5)
-        player.critDamage = math.min(GAME_CONSTANTS.MAX_CRIT_DAMAGE, player.critDamage + 0.05)
-
-        battleState.message = GameData.getText(currentGameLanguage, "battle_msg_level_up", {level = player.level})
-        battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION + 1
-        print(string.format("[GAME] Player leveled up to LV %d! HP: %d/%d, MP: %d/%d, ATK: %d, DEF: %d, CRT: %.1f, CRD: %.2f",
-                            player.level, player.hp, player.maxHp, player.mp, player.maxMp, player.attack, player.defense, player.critRate, player.critDamage))
-    end
-end
-
--- Inventory Management Functions
-function addItemToInventory(itemId, quantity)
-    if not itemId or not quantity or quantity <= 0 then
-        print("[INVENTORY ERROR] Invalid itemId or quantity for addItemToInventory.")
-        return false
-    end
-
-    local itemData = GameData.story.items[itemId]
-    if not itemData then
-        print("[INVENTORY ERROR] Item data not found for itemId: " .. itemId)
-        return false
-    end
-
-    local remainingQuantity = quantity
-
-    if itemData.stackable then
-        for i = 1, player.inventoryCapacity do
-            local slot = player.inventory[i]
-            if slot and slot.itemId == itemId and slot.quantity < itemData.maxStack then
-                local canAdd = itemData.maxStack - slot.quantity
-                if remainingQuantity <= canAdd then
-                    slot.quantity = slot.quantity + remainingQuantity
-                    remainingQuantity = 0
-                    print("[INVENTORY] Added " .. quantity .. " of " .. itemId .. " to existing stack in slot " .. i)
-                    return true
-                else
-                    slot.quantity = itemData.maxStack
-                    remainingQuantity = remainingQuantity - canAdd
-                    print("[INVENTORY] Filled stack in slot " .. i .. " with " .. itemId .. ". Remaining: " .. remainingQuantity)
-                end
-            end
-            if remainingQuantity == 0 then return true end
-        end
-    end
-
-    if remainingQuantity > 0 then
-        for i = 1, player.inventoryCapacity do
-            if player.inventory[i] == nil then
-                if itemData.stackable then
-                    local amountToAdd = math.min(remainingQuantity, itemData.maxStack)
-                    player.inventory[i] = {itemId = itemId, quantity = amountToAdd}
-                    remainingQuantity = remainingQuantity - amountToAdd
-                    print("[INVENTORY] Added " .. amountToAdd .. " of " .. itemId .. " to new slot " .. i)
-                else
-                    player.inventory[i] = {itemId = itemId, quantity = 1}
-                    remainingQuantity = remainingQuantity - 1
-                    print("[INVENTORY] Added 1 of non-stackable " .. itemId .. " to new slot " .. i)
-                end
-                if remainingQuantity == 0 then
-                    return true
-                end
-            end
-        end
-    end
-
-    if remainingQuantity > 0 then
-        print("[INVENTORY] Inventory full. Could not add " .. remainingQuantity .. " of " .. itemId)
-        uiMessage = "Inventory full!"
-        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-        return false
-    end
-    return true
-end
-
-function removeItemFromInventory(slotIndex, quantityToRemove)
-    if not slotIndex or slotIndex < 1 or slotIndex > player.inventoryCapacity then
-        print("[INVENTORY ERROR] Invalid slotIndex for removeItemFromInventory: " .. tostring(slotIndex))
-        return false
-    end
-
-    local slot = player.inventory[slotIndex]
-    if not slot then
-        print("[INVENTORY ERROR] No item found in slot " .. slotIndex .. " to remove.")
-        return false
-    end
-
-    local itemData = GameData.story.items[slot.itemId]
-    if not itemData then
-        print("[INVENTORY ERROR] Item data not found for item in slot " .. slotIndex .. " (itemId: " .. slot.itemId .. ")")
-        player.inventory[slotIndex] = nil
-        return false
-    end
-
-    if not itemData.stackable or quantityToRemove >= slot.quantity then
-        print("[INVENTORY] Removing item " .. slot.itemId .. " from slot " .. slotIndex)
-        player.inventory[slotIndex] = nil
-    else
-        slot.quantity = slot.quantity - quantityToRemove
-        print("[INVENTORY] Removed " .. quantityToRemove .. " of " .. slot.itemId .. " from slot " .. slotIndex .. ". Remaining: " .. slot.quantity)
-    end
-    return true
-end
-
-function useItem(slotIndex)
-    if not slotIndex or slotIndex < 1 or slotIndex > player.inventoryCapacity then
-        print("[INVENTORY ERROR] Invalid slotIndex for useItem: " .. tostring(slotIndex))
-        return
-    end
-
-    local itemInSlot = player.inventory[slotIndex]
-    if not itemInSlot then
-        print("[INVENTORY ERROR] No item in slot " .. slotIndex .. " to use.")
-        uiMessage = "Empty slot selected."
-        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-        return
-    end
-
-    local itemData = GameData.story.items[itemInSlot.itemId]
-    if not itemData then
-        print("[INVENTORY ERROR] Item data not found for " .. itemInSlot.itemId .. " in slot " .. slotIndex)
-        uiMessage = "Error: Unknown item data."
-        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-        return
-    end
-
-    print("[INVENTORY] Attempting to use item " .. itemInSlot.itemId .. " from slot " .. slotIndex)
-
-    if itemData.type == "consumable" then
-        local itemUsedSuccessfully = false
-        if itemData.effects then
-            for _, effect in ipairs(itemData.effects) do
-                if effect.type == "heal" then
-                    if player.hp < player.maxHp then
-                        local healAmount = effect.amount or 0
-                        player.hp = math.min(player.maxHp, player.hp + healAmount)
-                        local itemNameText = GameData.getText(currentGameLanguage, itemData.name_key)
-
-                        uiMessage = string.format("%s used! Healed %d HP.", itemNameText, healAmount)
-                        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-
-                        print(string.format("[INVENTORY] Player used %s. Healed %d HP. Current HP: %d/%d", itemInSlot.itemId, healAmount, player.hp, player.maxHp))
-
-                        if resources.sounds.heal and not audioState.isMutedSFX then
-                            resources.sounds.heal:play()
-                        end
-                        local healPS = resources.particleSystems.heal()
-                        if healPS then
-                            healPS:emit(100)
-                            table.insert(battleState.effects, {
-                                type = "heal",
-                                x = animations.player.x,
-                                y = animations.player.y,
-                                particleSystem = healPS,
-                                timer = GAME_CONSTANTS.TIMER.EFFECT_DURATION
-                            })
-                        end
-                        table.insert(battleState.effects, {
-                            type = "damage",
-                            amount = "+" .. tostring(healAmount),
-                            x = animations.player.x,
-                            y = animations.player.y - 50,
-                            timer = 1,
-                            color = {0, 1, 0}
-                        })
-                        itemUsedSuccessfully = true
-                    else
-                        uiMessage = "HP is already full."
-                        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-                        print("[INVENTORY] Player HP is full. Cannot use " .. itemInSlot.itemId)
-                        return
-                    end
-                end
-            end
-        else
-            print("[INVENTORY] Consumable item " .. itemInSlot.itemId .. " has no defined effects.")
-            uiMessage = GameData.getText(currentGameLanguage, itemData.name_key) .. " has no effect."
-            uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-        end
-
-        if itemUsedSuccessfully then
-            removeItemFromInventory(slotIndex, 1)
-        end
-    else
-        print("[INVENTORY] Item " .. itemInSlot.itemId .. " is not a consumable.")
-        uiMessage = GameData.getText(currentGameLanguage, itemData.name_key) .. " cannot be used right now."
-        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-    end
-end
--- End Inventory Management Functions
-
-function equipItem(inventorySlotIndex)
-    if not inventorySlotIndex or not player.inventory[inventorySlotIndex] then
-        print("[EQUIP] Invalid inventory slot index or empty slot: " .. tostring(inventorySlotIndex))
-        return false
-    end
-
-    local itemToEquip = player.inventory[inventorySlotIndex]
-    local itemId = itemToEquip.itemId
-    local itemData = GameData.items[itemId]
-
-    if not itemData then
-        print("[EQUIP] No item data found for: " .. itemId)
-        return false
-    end
-
-    if itemData.type ~= "equipment" or not itemData.slot then
-        print("[EQUIP] Item is not equippable: " .. itemId)
-        uiMessage = GameData.getText(currentGameLanguage, "error_not_equippable", {item = GameData.getText(currentGameLanguage, itemData.name_key)}, "This item cannot be equipped.")
-        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-        return false
-    end
-
-    local targetSlot = itemData.slot
-    print("[EQUIP] Attempting to equip " .. itemId .. " to slot " .. targetSlot)
-
-    -- If slot is occupied, attempt to unequip existing item first
-    if player.equipment[targetSlot] then
-        print("[EQUIP] Slot " .. targetSlot .. " is occupied by " .. player.equipment[targetSlot] .. ". Attempting to unequip it.")
-        local unequippedSuccessfully = unequipItem(targetSlot)
-        if not unequippedSuccessfully then
-            print("[EQUIP] Failed to unequip item from slot " .. targetSlot .. ". Cannot equip new item.")
-            -- uiMessage is set by unequipItem on failure (e.g. inventory full)
-            return false
-        end
-    end
-
-    -- Apply new item's stats
-    if itemData.stats then
-        for statName, value in pairs(itemData.stats) do
-            if isInArray(EQUIPPABLE_STATS, statName) then
-                player[statName] = (player[statName] or 0) + value
-                print(string.format("[EQUIP] Applied stat %s: %s%s to player. New value: %s", statName, (value > 0 and "+" or ""), value, player[statName]))
-            end
-        end
-    end
-
-    player.equipment[targetSlot] = itemId       -- Store item ID in equipment slot
-    player.inventory[inventorySlotIndex] = nil -- Remove from inventory
-
-    recalculatePlayerStats() -- Adjust HP/MP if max values changed
-
-    local itemName = GameData.getText(currentGameLanguage, itemData.name_key, nil, itemId)
-    uiMessage = GameData.getText(currentGameLanguage, "item_equipped", {item = itemName, slot = targetSlot}, "%{item} equipped to %{slot}.")
-    uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-    print("[EQUIP] Successfully equipped " .. itemId .. " to " .. targetSlot)
-    return true
-end
-
-function unequipItem(equipmentSlotKey)
-    if not equipmentSlotKey or not player.equipment[equipmentSlotKey] then
-        print("[UNEQUIP] Invalid equipment slot key or no item in slot: " .. tostring(equipmentSlotKey))
-        return false
-    end
-
-    local itemIdToUnequip = player.equipment[equipmentSlotKey]
-    local itemData = GameData.items[itemIdToUnequip]
-
-    if not itemData then
-        print("[UNEQUIP] No item data for item to unequip: " .. itemIdToUnequip)
-        player.equipment[equipmentSlotKey] = nil
-        return true
-    end
-    print("[UNEQUIP] Attempting to unequip " .. itemIdToUnequip .. " from slot " .. equipmentSlotKey)
-
-    if not addItemToInventory(itemIdToUnequip, 1) then
-        print("[UNEQUIP] Inventory full. Cannot unequip " .. itemIdToUnequip)
-        uiMessage = GameData.getText(currentGameLanguage, "error_inventory_full_unequip", {item = GameData.getText(currentGameLanguage, itemData.name_key)}, "Inventory full. Cannot unequip %{item}.")
-        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-        return false
-    end
-
-    if itemData.stats then
-        for statName, value in pairs(itemData.stats) do
-            if isInArray(EQUIPPABLE_STATS, statName) then
-                player[statName] = (player[statName] or 0) - value
-                print(string.format("[UNEQUIP] Reverted stat %s: %s%s from player. New value: %s", statName, (value > 0 and "-" or "+"), value, player[statName]))
-            end
-        end
-    end
-
-    player.equipment[equipmentSlotKey] = nil
-
-    recalculatePlayerStats()
-
-    local itemName = GameData.getText(currentGameLanguage, itemData.name_key, nil, itemIdToUnequip)
-    uiMessage = GameData.getText(currentGameLanguage, "item_unequipped", {item = itemName, slot = equipmentSlotKey}, "%{item} unequipped from %{slot}.")
-    uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-    print("[UNEQUIP] Successfully unequipped " .. itemIdToUnequip .. " from " .. equipmentSlotKey)
-    return true
-end
-
-function exitGrindingMode()
-    if currentState.isGrinding then
-        print("[GRINDING] Exiting grinding mode.")
-        currentState.isGrinding = false
-        currentState.currentGrindingLevelId = nil
-
-        saveGame() -- Save progress as per plan
-
-        -- Stop battle music and potentially start menu music before transition
-        if resources.sounds.battleBgm and resources.sounds.battleBgm:isPlaying() then
-            resources.sounds.battleBgm:stop()
-        end
-        if not audioState.isMutedBGM and resources.sounds.menuBgm then
-             resources.sounds.menuBgm:setLooping(true)
-             resources.sounds.menuBgm:play()
-        end
-
-        transitionGameState(gameState, "levelSelect") -- Or "menu" if preferred
-    end
-end
-
-function performPlayerAttack()
-    if skillSystem.attack.cooldown > 0 then
-        battleState.message = GameData.getText(currentGameLanguage, "battle_msg_skill_cooldown")
-        battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-        print("[BATTLE] Attack skill on cooldown")
-        return
-    end
-    if not audioState.isMutedSFX then
-        resources.sounds.attack:play()
-    end
-    animations.player.current = "attack"
-    local damage, isCrit = calculateDamage(player, enemy)
-    enemy.hp = validateNumber(enemy.hp - damage, 0, enemy.maxHp, 0)
-    local currentEnemyData = enemyData[menuState.levelSelect.currentLevel]
-    local enemyImage = resources.images[currentEnemyData.image] or resources.images.enemyDemonKing
-    local enemyDrawScale = math.min(positions.enemy.maxWidth / enemyImage:getWidth(), positions.enemy.maxHeight / enemyImage:getHeight())
-    if enemyImage:getHeight() * enemyDrawScale < positions.enemy.minHeight then
-        enemyDrawScale = positions.enemy.minHeight / enemyImage:getHeight()
-    end
-    local effectX = animations.enemy.x
-    local effectY = animations.enemy.y
-    local hitPS = resources.particleSystems.hit()
-    hitPS:emit(100)
-    table.insert(battleState.effects, {
-        type = "hit",
-        x = effectX,
-        y = effectY,
-        particleSystem = hitPS,
-        timer = GAME_CONSTANTS.TIMER.EFFECT_DURATION
-    })
-    local damageText = tostring(damage)
-    local damageColor = {1, 1, 1}
-    if isCrit then
-        damageText = damageText .. "!"
-        damageColor = {1, 0.5, 0}
-        if not audioState.isMutedSFX then
-            resources.sounds.crit:play()
-        end
-    end
-    table.insert(battleState.effects, {
-      type = "damage",
-      amount = damageText,
-      x = effectX,
-      y = effectY - 50,
-      timer = 1,
-      color = damageColor
-    })
-    battleState.message = isCrit and
-        GameData.getText(currentGameLanguage, "battle_msg_player_crit", {damage = damage}) or
-        GameData.getText(currentGameLanguage, "battle_msg_player_attack", {damage = damage})
-    battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-    battleState.phase = "action"
-    if enemy.hp <= 0 then
-        battleState.phase = "result"
-    else
-        TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY, startEnemyTurn, TIMER_GROUPS.BATTLE)
-    end
-    skillSystem.attack.cooldown = skillSystem.attack.maxCooldown
-end
-function performPlayerHeal()
-  print("[BATTLE ACTION] Player action: Heal")
-  local skill = skillSystem.heal
-  local skillData = skillInfo[4]
-  if skill.cooldown > 0 then
-    battleState.message = GameData.getText(currentGameLanguage, "battle_msg_skill_cooldown")
-    battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-    print("[BATTLE] Heal skill on cooldown")
-    return
-  end
-  if player.mp < skillData.mpCost then
-      battleState.message = GameData.getText(currentGameLanguage, "battle_msg_not_enough_mp")
-      battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-      print("[BATTLE] Not enough MP for Heal skill")
-      return
-  end
-    if not audioState.isMutedSFX then
-        resources.sounds.heal:play()
-        print("[AUDIO] Played sound: heal")
-    end
-    player.mp = math.max(0, player.mp - skillData.mpCost)
-    local healAmount = calculateHeal(player)
-    player.hp = validateNumber(player.hp + healAmount, 0, player.maxHp, player.hp)
-    local playerImage = resources.images.playerStand
-    local playerDrawScale = math.min(positions.player.maxWidth / playerImage:getWidth(), positions.player.maxHeight / playerImage:getHeight())
-    if playerImage:getHeight() * playerDrawScale < positions.player.minHeight then
-        playerDrawScale = positions.player.minHeight / playerImage:getHeight()
-    end
-    local effectX = animations.player.x
-    local effectY = animations.player.y
-    local healPS = resources.particleSystems.heal()
-    healPS:emit(100)
-    table.insert(battleState.effects, {
-        type = "heal",
-        x = effectX,
-        y = effectY,
-        particleSystem = healPS,
-        timer = GAME_CONSTANTS.TIMER.EFFECT_DURATION
-    })
-    table.insert(battleState.effects, {
-      type = "damage",
-      amount = "+" .. tostring(healAmount),
-      x = effectX,
-      y = effectY - 50,
-      timer = 1,
-      color = {0, 1, 0}
-    })
-    battleState.message = GameData.getText(currentGameLanguage, "battle_msg_player_heal", {healAmount = healAmount})
-    battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-    battleState.phase = "action"
-    TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY, startEnemyTurn, TIMER_GROUPS.BATTLE)
-    skillSystem.heal.cooldown = skillSystem.heal.maxCooldown
-    print("[SKILL SYSTEM] Heal skill cooldown set to " .. skillSystem.heal.cooldown)
-end
-function performPlayerDefend()
-  performPlayerDefend_original()
-end
-function performPlayerSpecial()
-  performPlayerSpecial_original()
-end
-function performPlayerDefend_original()
-  print("[BATTLE ACTION] Player action: Defend")
-  if skillSystem.defend.cooldown > 0 then
-    battleState.message = GameData.getText(currentGameLanguage, "battle_msg_skill_cooldown")
-    battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-    print("[BATTLE] Defend skill on cooldown")
-    return
-  end
-  if not audioState.isMutedSFX then
-    resources.sounds.defend:play()
-    print("[AUDIO] Played sound: defend")
-  end
-  player.isDefending = true
-  animations.player.current = "stand"
-  local playerImage = resources.images.playerStand
-  local playerImgWidth = playerImage:getWidth() * (positions.player.scale or 1)
-  local playerImgHeight = playerImage:getHeight() * (positions.player.scale or 1)
-  local effectX = animations.player.x
-  local effectY = animations.player.y
-  local defendPS = resources.particleSystems.defend()
-  defendPS:emit(100)
-  table.insert(battleState.effects, {
-    type = "defend",
-    x = effectX,
-    y = effectY,
-    particleSystem = defendPS,
-    timer = 0.5
-  })
-  battleState.message = GameData.getText(currentGameLanguage, "battle_msg_player_defend")
-  battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-  battleState.phase = "action"
-  print("[BATTLE STATE] Battle phase changed to 'action'")
-  addTimer(GAME_CONSTANTS.TIMER.ACTION_DELAY, function() startEnemyTurn() end, TIMER_GROUPS.BATTLE)
-  print("[TIMER] Added timer for enemy turn")
-  skillSystem.defend.cooldown = skillSystem.defend.maxCooldown
-  print("[SKILL SYSTEM] Defend skill cooldown set to " .. skillSystem.defend.cooldown)
-end
-function performPlayerSpecial_original()
-  print("[BATTLE ACTION] Player action: Special")
-  local skill = skillSystem.special
-  local skillData = skillInfo[3]
-  if skill.cooldown > 0 then
-    battleState.message = GameData.getText(currentGameLanguage, "battle_msg_skill_cooldown")
-    battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-    print("[BATTLE] Special skill on cooldown")
-    return
-  end
-  if player.mp < skillData.mpCost then
-      battleState.message = GameData.getText(currentGameLanguage, "battle_msg_not_enough_mp")
-      battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-      print("[BATTLE] Not enough MP for Special skill")
-      return
-  end
-  if not audioState.isMutedSFX then
-    resources.sounds.special:play()
-    print("[AUDIO] Played sound: special")
-  end
-player.mp = math.max(0, player.mp - skillData.mpCost)
-animations.player.current = "attack"
-local damage, isCrit = calculateDamage(player, enemy)
-print("[BATTLE] Player stats before special: HP=" .. player.hp .. ", MP=" .. player.mp .. ", Attack=" .. player.attack .. ", Defense=" .. player.defense .. ", CritRate=" .. player.critRate .. ", CritDamage=" .. player.critDamage)
-print("[BATTLE] Enemy stats before special: HP=" .. enemy.hp .. ", Attack=" .. enemy.attack .. ", Defense=" .. enemy.defense .. ", CritRate=" .. enemy.critRate .. ", CritDamage=" .. enemy.critDamage)
-enemy.hp = validateNumber(enemy.hp - damage, 0, enemy.maxHp, 0)
-print("[BATTLE] Player dealt " .. damage .. " damage to enemy with Special attack")
-local currentEnemyData = enemyData[menuState.levelSelect.currentLevel]
-local enemyImage = resources.images[currentEnemyData.image] or resources.images.enemyDemonKing
-local enemyDrawScale = math.min(positions.enemy.maxWidth / enemyImage:getWidth(), positions.enemy.maxHeight / enemyImage:getHeight())
-if enemyImage:getHeight() * enemyDrawScale < positions.enemy.minHeight then
-    enemyDrawScale = positions.enemy.minHeight / enemyImage:getHeight()
-end
-local effectX = animations.enemy.x
-local effectY = animations.enemy.y
-local hitPS = resources.particleSystems.hit()
-hitPS:emit(100)
-table.insert(battleState.effects, {
-    type = "hit",
-    x = effectX,
-    y = effectY,
-    particleSystem = hitPS,
-    timer = GAME_CONSTANTS.TIMER.EFFECT_DURATION
-})
-local damageText = tostring(damage)
-local damageColor = {1, 1, 0}
-if isCrit then
-    damageText = damageText .. "!"
-    damageColor = {1, 0.5, 0}
-    if not audioState.isMutedSFX then
-        resources.sounds.crit:play()
-    end
-end
-table.insert(battleState.effects, {
-  type = "damage",
-  amount = damageText,
-  x = effectX,
-  y = effectY - 50,
-  timer = 1,
-  color = damageColor
-})
-battleState.message = GameData.getText(currentGameLanguage, "battle_msg_player_special", {damage = damage})
-battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-battleState.phase = "action"
-print("[BATTLE STATE] Battle phase changed to 'action'")
-if enemy.hp <= 0 then
-  battleState.phase = "result"
-  print("[BATTLE STATE] Battle phase changed to 'result', enemy defeated by special attack")
-else
-  addTimer(GAME_CONSTANTS.TIMER.ACTION_DELAY, function() startEnemyTurn() end, TIMER_GROUPS.BATTLE)
-  print("[TIMER] Added timer for enemy turn")
-end
-skillSystem.special.cooldown = skillSystem.special.maxCooldown
-print("[SKILL SYSTEM] Special skill cooldown set to " .. skillSystem.special.cooldown)
-end
-function startEnemyTurn()
-    if battleState.phase ~= "action" then
-        print("[ERROR] Invalid battle phase for enemy turn: " .. tostring(battleState.phase))
-        return
-    end
-    battleState.turn = "enemy"
-    battleState.phase = validateBattlePhase("action")
-    local enemyDataForLevel = enemyData[menuState.levelSelect.currentLevel]
-    if not enemyDataForLevel then
-        print("[ERROR] Missing enemy data for level: " .. tostring(menuState.levelSelect.currentLevel))
-        return
-    end
-    local aiType = enemyAI[enemyDataForLevel.ai] or enemyAI.basic
-    local action = aiType.decideAction(enemy, player)
-    print("[ENEMY AI] Enemy AI decision: " .. action)
-    if action == "attack" then
-      print("[BATTLE ACTION] Enemy action: Attack")
-      animations.enemy.current = "attack"
-      local damage, isCrit = calculateDamage(enemy, player)
-      print("[BATTLE] Enemy stats before attack: HP=" .. enemy.hp .. ", Attack=" .. enemy.attack .. ", Defense=" .. enemy.defense .. ", CritRate=" .. enemy.critRate .. ", CritDamage=" .. enemy.critDamage)
-      print("[BATTLE] Player stats before attack: HP=" .. player.hp .. ", Attack=" .. player.attack .. ", Defense=" .. player.defense .. ", CritRate=" .. player.critRate .. ", CritDamage=" .. player.critRate .. ", CritDamage=" .. player.critDamage)
-      player.hp = math.max(0, player.hp - damage)
-      print("[BATTLE] Enemy dealt " .. damage .. " damage to player. Crit=" .. tostring(isCrit))
-      battleState.message = GameData.getText(currentGameLanguage, "battle_msg_enemy_attack", {damage = damage})
-      if isCrit then
-        battleState.message = GameData.getText(currentGameLanguage, "battle_msg_enemy_crit", {damage = damage})
-        if not audioState.isMutedSFX then
-          love.audio.play(resources.sounds.crit)
-          print("[AUDIO] Played sound: crit")
-        end
-      end
-      local playerImage = resources.images.playerStand
-      local playerDrawScale = math.min(positions.player.maxWidth / playerImage:getWidth(), positions.player.maxHeight / playerImage:getHeight())
-      if playerImage:getHeight() * playerDrawScale < positions.player.minHeight then
-          playerDrawScale = positions.player.minHeight / playerImage:getHeight()
-      end
-      local effectX = animations.player.x
-      local effectY = animations.player.y
-      local hitPS = resources.particleSystems.hit()
-      hitPS:emit(100)
-      table.insert(battleState.effects, {
-        type = "hit",
-        x = effectX,
-        y = effectY,
-        particleSystem = hitPS,
-        timer = GAME_CONSTANTS.TIMER.EFFECT_DURATION
-      })
-      local damageText = tostring(damage)
-      local damageColor = {1, 1, 1}
-      if isCrit then
-        damageText = damageText .. "!"
-        damageColor = {1, 0.5, 0}
-      end
-      table.insert(battleState.effects, {
-        type = "damage",
-        amount = damageText,
-        x = effectX,
-        y = effectY - 50,
-        timer = 1,
-        color = damageColor
-      })
-      local attackSound = math.random() < 0.5 and resources.sounds.enemyHit1 or resources.sounds.enemyHit2
-      if not audioState.isMutedSFX then
-        love.audio.play(attackSound)
-        print("[AUDIO] Played sound: " .. (attackSound == resources.sounds.enemyHit1 and "enemyHit1" or "enemyHit2"))
-      end
-    else
-      print("[BATTLE ACTION] Enemy action: Defend")
-      enemy.isDefending = true
-      battleState.message = GameData.getText(currentGameLanguage, "battle_msg_enemy_defend")
-      local enemyImage = resources.images[enemyDataForLevel.image] or resources.images.enemyDemonKing
-      local enemyDrawScale = math.min(positions.enemy.maxWidth / enemyImage:getWidth(), positions.enemy.maxHeight / enemyImage:getHeight())
-      if enemyImage:getHeight() * enemyDrawScale < positions.enemy.minHeight then
-          enemyDrawScale = positions.enemy.minHeight / enemyImage:getHeight()
-      end
-      local effectX = animations.enemy.x
-      local effectY = animations.enemy.y
-      local defendPS = resources.particleSystems.defend()
-      defendPS:emit(100)
-      table.insert(battleState.effects, {
-        type = "defend",
-        x = effectX,
-        y = effectY,
-        particleSystem = defendPS,
-        timer = 0.5
-      })
-    end
-    battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-    if player.hp <= 0 then
-    else
-      addTimer(GAME_CONSTANTS.TIMER.ACTION_DELAY, function()
-        if gameState == "battle" then
-            battleState.turn = "player"
-            battleState.phase = "select"
-            player.isDefending = false
-            enemy.isDefending = false
-            animations.player.current = "stand"
-            animations.enemy.current = "stand"
-            print("[BATTLE TURN] Player turn started")
-            print("[BATTLE STATE] Battle phase changed to 'select'")
-        end
-      end, TIMER_GROUPS.BATTLE)
-      print("[TIMER] Added timer for player turn")
-    end
-    updateCooldowns()
-    print("[SKILL SYSTEM] Cooldowns updated")
-end
-function drawPauseUI()
-  local windowWidth = love.graphics.getWidth()
-  local windowHeight = love.graphics.getHeight()
-love.graphics.setColor(0, 0, 0, 0.8)
-love.graphics.rectangle("fill", 0, 0, windowWidth, windowHeight)
-local fontPauseTitle = resources.fonts.battle
-    if currentGameLanguage == "zh" then
-        fontPauseTitle = resources.fonts.chineseBattle
-    end
-love.graphics.setFont(fontPauseTitle)
-love.graphics.setColor(1, 1, 1)
-local title = GameData.getText(currentGameLanguage, "pause_title")
-local titleWidth = fontPauseTitle:getWidth(title)
-love.graphics.print(title, windowWidth / 2 - titleWidth / 2, windowHeight / 2 - 100)
-local fontUIPause = resources.fonts.ui
-    if currentGameLanguage == "zh" then
-        fontUIPause = resources.fonts.chineseUI
-    end
-love.graphics.setFont(fontUIPause)
-pauseState.buttonAreas = {}
-for i, option in ipairs(pauseState.options) do
-    local buttonY = windowHeight / 2 - 20 + (i-1) * 60
-    local buttonRect = {
-        x = windowWidth / 2 - 100,
-        y = buttonY,
-        width = 200,
-        height = 40
-    }
-    pauseState.buttonAreas[i] = buttonRect
-    if i == pauseState.currentOption then
-        love.graphics.setColor(1, 1, 0)
-        love.graphics.rectangle("line", buttonRect.x, buttonRect.y, buttonRect.width, buttonRect.height)
-    else
-        love.graphics.setColor(1, 1, 1)
-    end
-    love.graphics.rectangle("line", buttonRect.x, buttonRect.y, buttonRect.width, buttonRect.height)
-    local textWidth = fontUIPause:getWidth(GameData.getText(currentGameLanguage, option.textKey))
-    love.graphics.print(GameData.getText(currentGameLanguage, option.textKey),
-        buttonRect.x + buttonRect.width / 2 - textWidth / 2,
-        buttonRect.y + buttonRect.height / 2 - 10)
-end
-end
-function drawVictoryUI()
-    local windowWidth = love.graphics.getWidth()
-    local windowHeight = love.graphics.getHeight()
-    love.graphics.setColor(1, 1, 1)
-    love.graphics.draw(resources.images.background, 0, 0, 0,
-        windowWidth/resources.images.background:getWidth(),
-        windowHeight/resources.images.background:getHeight())
-    love.graphics.setColor(0, 0, 0, 0.8)
-    love.graphics.rectangle("fill", 0, 0, windowWidth, windowHeight)
-    local fontVictoryTitle = resources.fonts.battle
-    if currentGameLanguage == "zh" then
-        fontVictoryTitle = resources.fonts.chineseBattle
-    end
-    love.graphics.setFont(fontVictoryTitle)
-    love.graphics.setColor(0, 1, 0)
-    local text = GameData.getText(currentGameLanguage, "victory_title")
-    local textWidth = fontVictoryTitle:getWidth(text)
-    love.graphics.print(text, windowWidth / 2 - textWidth / 2, windowHeight / 2 - 50)
-    resultState.buttonAreas = {}
-    local restartButton = {
-        x = windowWidth / 2 - 100,
-        y = windowHeight / 2 + 20,
-        width = 200,
-        height = 40,
-        textKey = "result_restart"
-    }
-    resultState.buttonAreas[1] = restartButton
-    if resultState.currentOption == 1 then
-        love.graphics.setColor(1, 1, 0)
-        love.graphics.rectangle("line", restartButton.x, restartButton.y, restartButton.width, restartButton.height)
-    else
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.rectangle("line", restartButton.x, restartButton.y, restartButton.width, restartButton.height)
-    end
-    local fontUIVictory = resources.fonts.ui
-    if currentGameLanguage == "zh" then
-        fontUIVictory = resources.fonts.chineseUI
-    end
-    love.graphics.setFont(fontUIVictory)
-    local buttonTextWidth = fontUIVictory:getWidth(GameData.getText(currentGameLanguage, restartButton.textKey))
-    love.graphics.print(GameData.getText(currentGameLanguage, restartButton.textKey), restartButton.x + restartButton.width / 2 - buttonTextWidth / 2 , restartButton.y + restartButton.height / 2 - 10)
-    local mainMenuButton = {
-        x = windowWidth / 2 - 100,
-        y = windowHeight / 2 + 80,
-        width = 200,
-        height = 40,
-        textKey = "result_main_menu"
-    }
-    resultState.buttonAreas[2] = mainMenuButton
-    if resultState.currentOption == 2 then
-        love.graphics.setColor(1, 1, 0)
-        love.graphics.rectangle("line", mainMenuButton.x, mainMenuButton.y, mainMenuButton.width, mainMenuButton.height)
-    else
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.rectangle("line", mainMenuButton.x, mainMenuButton.y, mainMenuButton.width, mainMenuButton.height)
-    end
-    love.graphics.setFont(fontUIVictory)
-    local mainMenuTextWidth = fontUIVictory:getWidth(GameData.getText(currentGameLanguage, mainMenuButton.textKey))
-    love.graphics.print(GameData.getText(currentGameLanguage, mainMenuButton.textKey), mainMenuButton.x + mainMenuButton.width / 2 - mainMenuTextWidth / 2 , mainMenuButton.y + mainMenuButton.height / 2 - 10)
-end
-function drawDefeatUI()
-   local windowWidth = love.graphics.getWidth()
-   local windowHeight = love.graphics.getHeight()
-   love.graphics.setColor(1, 1, 1)
-   love.graphics.draw(resources.images.background, 0, 0, 0,
-       windowWidth/resources.images.background:getWidth(),
-       windowHeight/resources.images.background:getHeight())
-   love.graphics.setColor(0, 0, 0, 0.8)
-   love.graphics.rectangle("fill", 0, 0, windowWidth, windowHeight)
- local fontDefeatTitle = resources.fonts.battle
-    if currentGameLanguage == "zh" then
-        fontDefeatTitle = resources.fonts.chineseBattle
-    end
- love.graphics.setFont(fontDefeatTitle)
- love.graphics.setColor(1, 0, 0)
- local text = GameData.getText(currentGameLanguage, "defeat_title")
- local textWidth = fontDefeatTitle:getWidth(text)
- love.graphics.print(text, windowWidth / 2 - textWidth / 2, windowHeight / 2 - 50)
-resultState.buttonAreas = {}
-local restartButton = {
-   x = windowWidth / 2 - 100,
-   y = windowHeight / 2 + 20,
-   width = 200,
-   height = 40,
-   textKey = "result_restart"
- }
- resultState.buttonAreas[1] = restartButton
- if resultState.currentOption == 1 then
-    love.graphics.setColor(1, 1, 0)
-    love.graphics.rectangle("line", restartButton.x, restartButton.y, restartButton.width, restartButton.height)
- else
-    love.graphics.setColor(1, 1, 1)
-    love.graphics.rectangle("line", restartButton.x, restartButton.y, restartButton.width, restartButton.height)
- end
- local fontUIDefeat = resources.fonts.ui
-    if currentGameLanguage == "zh" then
-        fontUIDefeat = resources.fonts.chineseUI
-    end
- love.graphics.setFont(fontUIDefeat)
- local buttonTextWidth = fontUIDefeat:getWidth(GameData.getText(currentGameLanguage, restartButton.textKey))
- love.graphics.print(GameData.getText(currentGameLanguage, restartButton.textKey), restartButton.x + restartButton.width / 2 - buttonTextWidth / 2 , restartButton.y + restartButton.height / 2 - 10)
- local mainMenuButton = {
-   x = windowWidth / 2 - 100,
-   y = windowHeight / 2 + 80,
-   width = 200,
-   height = 40,
-   textKey = "result_main_menu"
- }
- resultState.buttonAreas[2] = mainMenuButton
- if resultState.currentOption == 2 then
-    love.graphics.setColor(1, 1, 0)
-    love.graphics.rectangle("line", mainMenuButton.x, mainMenuButton.y, mainMenuButton.width, mainMenuButton.height)
- else
-    love.graphics.setColor(1, 1, 1)
-    love.graphics.rectangle("line", mainMenuButton.x, mainMenuButton.y, mainMenuButton.width, mainMenuButton.height)
- end
- local mainMenuTextWidth = fontUIDefeat:getWidth(GameData.getText(currentGameLanguage, mainMenuButton.textKey))
- love.graphics.print(GameData.getText(currentGameLanguage, mainMenuButton.textKey), mainMenuButton.x + mainMenuButton.width / 2 - mainMenuTextWidth / 2 , mainMenuButton.y + mainMenuButton.height / 2 - 10)
-end
-function drawSkillInfoUI()
-local windowWidth = love.graphics.getWidth()
-local windowHeight = love.graphics.getHeight()
-love.graphics.setColor(0, 0, 0, 0.8)
-love.graphics.rectangle("fill", 0, 0, windowWidth, windowHeight)
-local fontSkillInfoTitle = resources.fonts.battle
-    if currentGameLanguage == "zh" then
-        fontSkillInfoTitle = resources.fonts.chineseBattle
-    end
-love.graphics.setFont(fontSkillInfoTitle)
-love.graphics.setColor(1, 1, 1)
-local title = GameData.getText(currentGameLanguage, "skill_info_title")
-local titleWidth = fontSkillInfoTitle:getWidth(title)
-love.graphics.print(title, windowWidth / 2 - titleWidth / 2, 50)
-local fontUISkillInfo = resources.fonts.ui
-    if currentGameLanguage == "zh" then
-        fontUISkillInfo = resources.fonts.chineseUI
-    end
-love.graphics.setFont(fontUISkillInfo)
-local listX = 50
-local listY = 100
- for i, skill in ipairs(skillInfo) do
-     if i == uiState.selectedSkill then
-         love.graphics.setColor(1, 1, 0)
-     else
-          love.graphics.setColor(1, 1, 1)
-     end
-     love.graphics.print(GameData.getText(currentGameLanguage, "skill_name_" .. skill.key), listX, listY + (i - 1) * 30)
-   love.graphics.setColor(0.8, 0.8, 0.8)
-   love.graphics.print(GameData.getText(currentGameLanguage, "skill_desc_" .. skill.key), listX + 20, listY + 20 + (i - 1) * 30)
-end
- local detailsX = windowWidth / 2 + 50
- local detailsY = 100
- local selectedSkill = skillInfo[uiState.selectedSkill]
- love.graphics.setColor(1, 1, 1)
- love.graphics.print(GameData.getText(currentGameLanguage, "skill_detail_name") .. ": " .. GameData.getText(currentGameLanguage, "skill_name_" .. selectedSkill.key), detailsX, detailsY)
- love.graphics.print(GameData.getText(currentGameLanguage, "skill_detail_type") .. ": " .. GameData.getText(currentGameLanguage, "skill_type_" .. selectedSkill.type), detailsX, detailsY + 30)
- love.graphics.print(GameData.getText(currentGameLanguage, "skill_detail_desc") .. ": ", detailsX, detailsY + 60)
- love.graphics.setFont(fontUISkillInfo)
- love.graphics.setColor(0.8, 0.8, 0.8)
- love.graphics.printf(GameData.getText(currentGameLanguage, "skill_details_" .. selectedSkill.key), detailsX, detailsY + 80, windowWidth - detailsX - 50, "left")
- love.graphics.setFont(fontSkillInfoTitle)
-end
-skillSystem = {
-  attack = { cooldown = 0, maxCooldown = GAME_CONSTANTS.COOLDOWN.ATTACK },
-  defend = { cooldown = 0, maxCooldown = GAME_CONSTANTS.COOLDOWN.DEFEND },
-  special = { cooldown = 0, maxCooldown = GAME_CONSTANTS.COOLDOWN.SPECIAL },
-  heal = { cooldown = 0, maxCooldown = GAME_CONSTANTS.COOLDOWN.HEAL }
-}
-function updateCooldowns()
-  for _, skill in pairs(skillSystem) do
-    if skill.cooldown > 0 then
-      skill.cooldown = skill.cooldown - 1
-    end
-  end
-end
-function drawBattleScene()
-  local bgKey
-  if currentState.isGrinding and currentState.currentGrindingLevelId then
-    local grindingLevelData = GameData.grindingLevels[currentState.currentGrindingLevelId]
-    if grindingLevelData and grindingLevelData.battleBg then
-      bgKey = grindingLevelData.battleBg -- Use battleBg from grinding level definition
-    else
-      print("[ERROR] Grinding level data or battleBg missing for: " .. currentState.currentGrindingLevelId)
-      bgKey = "battleBgForest" -- Fallback
-    end
-  else
-    bgKey = battleBackgrounds[menuState.levelSelect.currentLevel] -- Regular level background
-  end
-
-  local bgImage = resources.images[bgKey]
-  if bgImage then
-      love.graphics.draw(bgImage, 0, 0, 0,
-        love.graphics.getWidth()/bgImage:getWidth(),
-        love.graphics.getHeight()/bgImage:getHeight())
-  else
-      love.graphics.setColor(0.5, 0.5, 0.5)
-      love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
-      love.graphics.setColor(1,1,1)
-  end
-end
-function drawOptionsUI()
-  local windowWidth = love.graphics.getWidth()
-  local windowHeight = love.graphics.getHeight()
-  love.graphics.draw(resources.images.background, 0, 0, 0,
-    windowWidth/resources.images.background:getWidth(),
-    windowHeight/resources.images.background:getHeight())
-  local fontOptionsTitle = resources.fonts.battle
-  if currentGameLanguage == "zh" then
-    fontOptionsTitle = resources.fonts.chineseBattle
-  end
-  love.graphics.setFont(fontOptionsTitle)
-  love.graphics.setColor(1, 1, 1)
-  local title = GameData.getText(currentGameLanguage, "options_title")
-  local titleWidth = fontOptionsTitle:getWidth(title)
-  love.graphics.print(title, windowWidth / 2 - titleWidth / 2, windowHeight * 0.2)
-  local fontUIOptions = resources.fonts.ui
-  if currentGameLanguage == "zh" then
-    fontUIOptions = resources.fonts.chineseUI
-  end
-  love.graphics.setFont(fontUIOptions)
-  optionsState.buttonAreas = {}
-  optionsState.languageButtonAreas = {}
-  optionsState.resolutionButtonAreas = {}
-  optionsState.fontSizeButtonAreas = {}
-  for i, option in ipairs(optionsState.options) do
-    local optionY = windowHeight * 0.4 + (i-1) * 50
-    local buttonRect = {
-      x = windowWidth / 2 - 150,
-      y = optionY,
-      width = 300,
-      height = 40
-    }
-    optionsState.buttonAreas[i] = buttonRect
-    if i == optionsState.currentOption then
-      love.graphics.setColor(1, 1, 0)
-      love.graphics.rectangle("line", buttonRect.x, buttonRect.y, buttonRect.width, buttonRect.height)
-    else
-      love.graphics.setColor(1, 1, 1)
-    end
-    local optionText = GameData.getText(currentGameLanguage, option.textKey)
-    if option.type == "language" then
-      optionText = optionText .. ": " .. string.upper(currentGameLanguage)
-      local arrowButtonWidth = 30
-      local leftArrowRect = {
-        x = buttonRect.x - arrowButtonWidth - 5,
-        y = buttonRect.y,
-        width = arrowButtonWidth,
-        height = buttonRect.height
-      }
-      local rightArrowRect = {
-        x = buttonRect.x + buttonRect.width + 5,
-        y = buttonRect.y,
-        width = arrowButtonWidth,
-        height = buttonRect.height
-      }
-      optionsState.languageButtonAreas["left"] = leftArrowRect
-      optionsState.languageButtonAreas["right"] = rightArrowRect
-      love.graphics.rectangle("line", leftArrowRect.x, leftArrowRect.y, leftArrowRect.width, leftArrowRect.height)
-      love.graphics.print("<", leftArrowRect.x + 10, leftArrowRect.y + 10)
-      love.graphics.rectangle("line", rightArrowRect.x, rightArrowRect.y, rightArrowRect.width, rightArrowRect.height)
-      love.graphics.print(">", rightArrowRect.x + 10, rightArrowRect.y + 10)
-    elseif option.type == "resolution" then
-        optionText = optionText .. ": " .. option.resolutionOptions[currentResolutionIndex].name
-        local arrowButtonWidth = 30
-        local leftArrowRect = {
-            x = buttonRect.x - arrowButtonWidth - 5,
-            y = buttonRect.y,
-            width = arrowButtonWidth,
-            height = buttonRect.height
-        }
-        local rightArrowRect = {
-            x = buttonRect.x + buttonRect.width + 5,
-            y = buttonRect.y,
-            width = arrowButtonWidth,
-            height = buttonRect.height
-        }
-        optionsState.resolutionButtonAreas["left"] = leftArrowRect
-        optionsState.resolutionButtonAreas["right"] = rightArrowRect
-        love.graphics.rectangle("line", leftArrowRect.x, leftArrowRect.y, leftArrowRect.width, leftArrowRect.height)
-        love.graphics.print("<", leftArrowRect.x + 10, leftArrowRect.y + 10)
-        love.graphics.rectangle("line", rightArrowRect.x, rightArrowRect.y, rightArrowRect.width, rightArrowRect.height)
-        love.graphics.print(">", rightArrowRect.x + 10, rightArrowRect.y + 10)
-    elseif option.type == "font_size" then
-        optionText = optionText .. ": " .. string.format("%.1fX", option.fontSizeOptions[GAME_CONSTANTS.currentFontSizeIndex])
-        local arrowButtonWidth = 30
-        local leftArrowRect = {
-            x = buttonRect.x - arrowButtonWidth - 5,
-            y = buttonRect.y,
-            width = arrowButtonWidth,
-            height = buttonRect.height
-        }
-        local rightArrowRect = {
-            x = buttonRect.x + buttonRect.width + 5,
-            y = buttonRect.y,
-            width = arrowButtonWidth,
-            height = buttonRect.height
-        }
-        optionsState.fontSizeButtonAreas["left"] = leftArrowRect
-        optionsState.fontSizeButtonAreas["right"] = rightArrowRect
-        love.graphics.rectangle("line", leftArrowRect.x, leftArrowRect.y, leftArrowRect.width, leftArrowRect.height)
-        love.graphics.print("<", leftArrowRect.x + 10, leftArrowRect.y + 10)
-        love.graphics.rectangle("line", rightArrowRect.x, rightArrowRect.y, rightArrowRect.width, rightArrowRect.height)
-        love.graphics.print(">", rightArrowRect.x + 10, rightArrowRect.y + 10)
-    elseif option.type == "toggle" then
-      local targetState = option.targetState or audioState
-      optionText = optionText .. ": " .. (targetState[option.state] and GameData.getText(currentGameLanguage, "options_on") or GameData.getText(currentGameLanguage, "options_off"))
-    end
-    love.graphics.print(optionText, buttonRect.x, buttonRect.y)
-  end
-  local backButtonRect = {
-    x = 10,
-    y = 10,
-    width = 50,
-    height = 50
-  }
-  optionsState.backButtonArea = backButtonRect
-  love.graphics.setColor(1, 1, 1)
-  love.graphics.rectangle("line", backButtonRect.x, backButtonRect.y, backButtonRect.width, backButtonRect.height)
-  love.graphics.print("<", backButtonRect.x + 15, backButtonRect.y + 15)
-end
-
-function table_to_string(tbl)
-    local s = "{\n"
-    local first = true
-    for k, v in pairs(tbl) do
-        if type(v) == "function" then
-            print("Warning: Skipping function value for key: " .. tostring(k))
-            goto continue
-        end
-        if type(k) == "string" and k:sub(1,1) == "_" then
-            print("Warning: Skipping internal/private key: " .. k)
-            goto continue
-        end
-
-        if not first then
-            s = s .. ",\n"
-        end
-        first = false
-
-        if type(k) == "number" then
-            s = s .. "  [" .. k .. "] = "
-        elseif type(k) == "string" then
-            s = s .. "  " .. string.format("%q", k) .. " = "
-        else
-            print("Warning: Skipping unsupported key type: " .. type(k))
-            first = true
-            goto continue
-        end
-
-        if type(v) == "number" then
-            s = s .. tostring(v)
-        elseif type(v) == "string" then
-            s = s .. string.format("%q", v)
-        elseif type(v) == "boolean" then
-            s = s .. tostring(v)
-        elseif type(v) == "table" then
-            s = s .. table_to_string(v)
-        else
-            print("Warning: Skipping unsupported value type " .. type(v) .. " for key " .. tostring(k))
-            first = true
-        end
-        ::continue::
-    end
-    s = s .. "\n}"
-    return s
-end
-
-function saveGame()
-    local saveData = {
-        player = {
-            hp = player.hp,
-            maxHp = player.maxHp,
-            mp = player.mp,
-            maxMp = player.maxMp,
-            level = player.level,
-            exp = player.exp,
-            expToNextLevel = player.expToNextLevel,
-            attack = player.attack,
-            defense = player.defense,
-            critRate = player.critRate,
-            critDamage = player.critDamage,
-            inventory = player.inventory,
-            inventoryCapacity = player.inventoryCapacity,
-            activeQuests = player.activeQuests,
-            completedQuests = player.completedQuests,
-        },
-        currentState = {
-            currentLevel = currentState.currentLevel,
-            dialogueIndex = currentState.dialogueIndex,
-        },
-        playerSettings = {
-            isCheatMode = playerSettings.isCheatMode,
-            isInfiniteHP = playerSettings.isInfiniteHP,
-            isFullScreen = playerSettings.isFullScreen,
-        },
-        audioState = {
-            isMutedBGM = audioState.isMutedBGM,
-            isMutedSFX = audioState.isMutedSFX,
-        },
-        currentResolutionIndex = currentResolutionIndex,
-        currentFontSizeIndex = GAME_CONSTANTS.currentFontSizeIndex,
-        currentGameLanguage = currentGameLanguage,
-        skillCooldowns = {
-            attack = skillSystem.attack.cooldown,
-            defend = skillSystem.defend.cooldown,
-            special = skillSystem.special.cooldown,
-            heal = skillSystem.heal.cooldown,
-        }
-    }
-
-    local saveFile = "savegame.sav"
-    local success, err = love.filesystem.write(saveFile, table_to_string(saveData))
-    if success then
-        print("[SAVE GAME] Game saved successfully to " .. saveFile)
-        battleState.message = GameData.getText(currentGameLanguage, "game_saved_success")
-        battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-    else
-        print("[SAVE GAME] Failed to save game: " .. tostring(err))
-        battleState.message = GameData.getText(currentGameLanguage, "game_saved_fail")
-        battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-    end
-end
-
-function drawStatsScreen()
-    local windowWidth = love.graphics.getWidth()
-    local windowHeight = love.graphics.getHeight()
-    love.graphics.clear(0.15, 0.15, 0.1, 1) -- Dark green-ish background
-
-    local uiFont = resources.fonts.ui or love.graphics.newFont(18) -- Ensure a decent size
-    local titleFont = resources.fonts.battle or love.graphics.newFont(28)
-
-    statsScreenState.lineHeight = uiFont:getHeight() + 8 -- Add some padding
-    local currentY = statsScreenState.padding
-
-    -- Title
-    love.graphics.setFont(titleFont)
-    love.graphics.setColor(1, 1, 1)
-    local titleText = GameData.getText(currentGameLanguage, "stats_screen_title", nil, "Player Statistics")
-    love.graphics.printf(titleText, 0, currentY, windowWidth, "center")
-    currentY = currentY + titleFont:getHeight() + statsScreenState.padding * 2
-
-    -- Stats Display
-    love.graphics.setFont(uiFont)
-
-    local statsToDisplay = {
-        {label_key = "stat_label_level", value = player.level},
-        {label_key = "stat_label_exp", value_format = "%s / %s", value = player.exp, value2 = player.expToNextLevel},
-        {label_key = "stat_label_hp", value_format = "%s / %s", value = player.hp, value2 = player.maxHp},
-        {label_key = "stat_label_mp", value_format = "%s / %s", value = player.mp, value2 = player.maxMp},
-        {label_key = "stat_label_attack", value = player.attack},
-        {label_key = "stat_label_defense", value = player.defense},
-        {label_key = "stat_label_crit_rate", value_format = "%s%%", value = player.critRate},
-        {label_key = "stat_label_crit_damage", value_format = "%sx", value = player.critDamage}
-    }
-
-    -- Determine max label width for alignment (simple version)
-    local maxLabelWidth = 0
-    for _, statItem in ipairs(statsToDisplay) do
-        local labelText = GameData.getText(currentGameLanguage, statItem.label_key, nil, statItem.label_key) .. ":"
-        if uiFont:getWidth(labelText) > maxLabelWidth then
-            maxLabelWidth = uiFont:getWidth(labelText)
-        end
-    end
-    statsScreenState.labelColumnWidth = maxLabelWidth + statsScreenState.padding
-    statsScreenState.valueColumnX = statsScreenState.padding + statsScreenState.labelColumnWidth
-
-    -- Draw each statistic
-    for _, statItem in ipairs(statsToDisplay) do
-        love.graphics.setColor(0.8, 0.8, 1) -- Label color
-        local labelText = GameData.getText(currentGameLanguage, statItem.label_key, nil, statItem.label_key) .. ":"
-        love.graphics.print(labelText, statsScreenState.padding + (statsScreenState.labelColumnWidth - uiFont:getWidth(labelText) - statsScreenState.padding), currentY) -- Right align labels
-
-        love.graphics.setColor(1, 1, 1) -- Value color
-        local valueString
-        if statItem.value_format then
-            if statItem.value2 then
-                valueString = string.format(statItem.value_format, tostring(statItem.value), tostring(statItem.value2))
-            else
-                valueString = string.format(statItem.value_format, tostring(statItem.value))
-            end
-        else
-            valueString = tostring(statItem.value)
-        end
-        love.graphics.print(valueString, statsScreenState.valueColumnX, currentY)
-
-        currentY = currentY + statsScreenState.lineHeight
-    end
-
-    -- Instructions
-    love.graphics.setColor(0.8, 0.8, 0.8)
-    local instructions = GameData.getText(currentGameLanguage, "stats_screen_instructions", nil, "Press ESC to go back")
-    love.graphics.printf(instructions, 0, windowHeight - statsScreenState.lineHeight - statsScreenState.padding, windowWidth, "center")
-end
-
-function handleStatsScreenInput(dt)
-    -- Placeholder: Will be implemented if complex input is needed later
-    -- For now, Esc is handled in love.keypressed
-end
-
-function loadGame()
-    local saveFile = "savegame.sav"
-    if not love.filesystem.isFile(saveFile) then
-        print("[LOAD GAME] No save file found.")
-        battleState.message = GameData.getText(currentGameLanguage, "game_load_no_file")
-        battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-        return false
-    end
-
-    local success, content = love.filesystem.read(saveFile)
-    if not success then
-        print("[LOAD GAME] Failed to read save file: " .. tostring(content))
-        battleState.message = GameData.getText(currentGameLanguage, "game_load_fail")
-        battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-        return false
-    end
-
-    local loadedChunk, err = load("return " .. content, "savegame.sav")
-    if not loadedChunk then
-        print("[LOAD GAME] Failed to parse save data: " .. tostring(err))
-        battleState.message = GameData.getText(currentGameLanguage, "game_load_corrupt")
-        battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-        return false
-    end
-    local data = loadedChunk()
-
-    if data.player then
-        player.hp = data.player.hp or player.hp
-        player.maxHp = data.player.maxHp or player.maxHp
-        player.mp = data.player.mp or player.mp
-        player.maxMp = data.player.maxMp or player.maxMp
-        player.level = data.player.level or player.level
-        player.exp = data.player.exp or player.exp
-        player.expToNextLevel = data.player.expToNextLevel or player.expToNextLevel
-        player.attack = data.player.attack or player.attack
-        player.defense = data.player.defense or player.defense
-        player.critRate = data.player.critRate or player.critRate
-        player.critDamage = data.player.critDamage or player.critDamage
-
-        player.activeQuests = data.player.activeQuests or {}
-        player.completedQuests = data.player.completedQuests or {}
-
-        player.inventoryCapacity = data.player.inventoryCapacity or 20
-        local loadedInventory = data.player.inventory or {}
-        player.inventory = {}
-        for i = 1, player.inventoryCapacity do
-            if loadedInventory[i] then
-                player.inventory[i] = loadedInventory[i]
-            else
-                player.inventory[i] = nil
-            end
-        end
-
-        player.image = resources.images.playerStand
-        player.isDefending = false
-        player.status = {}
-        player.combo = 0
-    end
-
-    if data.currentState then
-        currentState.currentLevel = data.currentState.currentLevel or 1
-        currentState.dialogueIndex = data.currentState.dialogueIndex or 1
-        GameData.loadStoryState(currentState.currentLevel, currentState.dialogueIndex)
-        print("[LOAD GAME] Story state loaded to level " .. currentState.currentLevel .. ", dialogue index " .. currentState.dialogueIndex)
-    end
-
-    if data.playerSettings then
-        playerSettings.isCheatMode = data.playerSettings.isCheatMode or false
-        playerSettings.isInfiniteHP = data.playerSettings.isInfiniteHP or false
-        playerSettings.isFullScreen = data.playerSettings.isFullScreen or false
-    end
-
-    if data.audioState then
-        audioState.isMutedBGM = data.audioState.isMutedBGM or false
-        audioState.isMutedSFX = data.audioState.isMutedSFX or false
-    end
-
-    currentResolutionIndex = data.currentResolutionIndex or 1
-    GAME_CONSTANTS.currentFontSizeIndex = data.currentFontSizeIndex or 2
-    currentGameLanguage = data.currentGameLanguage or "en"
-
-    setCurrentLanguage(currentGameLanguage)
-    applyFontSizeChange()
-    applyResolutionChange()
-    
-    if data.skillCooldowns then
-        skillSystem.attack.cooldown = data.skillCooldowns.attack or 0
-        skillSystem.defend.cooldown = data.skillCooldowns.defend or 0
-        skillSystem.special.cooldown = data.skillCooldowns.special or 0
-        skillSystem.heal.cooldown = data.skillCooldowns.heal or 0
-    end
-
-    transitionGameState(nil, "menu")
-    battleState.message = ""
-    battleState.messageTimer = 0
-
-    print("[LOAD GAME] Game loaded successfully.")
-    battleState.message = GameData.getText(currentGameLanguage, "game_loaded_success")
-    battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
-    return true
 end

@@ -23,7 +23,6 @@ This 2D demo is intentionally simplified and **does not include** features plann
 - **Movement**: This 2D game restricts player movement to direct transitions into duel states after the story mode, lacking free-roam exploration. A movement script is not included.  
 - **Weapon Switching**  
 - **Leveling System**: Character progression and EXP management  
-- **Small Monsters for Leveling (Grinding)**  
 - **Respawn System**  
 - **Room Event Triggers**: Events within rooms, such as traps, treasure, or monster encounters.  
 - **Equipment System**  
@@ -34,7 +33,7 @@ This 2D demo is intentionally simplified and **does not include** features plann
 - **Mini-Map**  
 - **Quest Page** : Show players’ mission
 
-Despite these simplifications, the 2D game codebase already consists of approximately **5000+ lines of code** (V0.01). This provides a tangible reference point for understanding the scale and complexity even of a reduced-scope game and highlights potential challenges in developing a more feature-rich 3D project within our timeframe.
+Despite these simplifications, the 2D game codebase already consists of approximately **5500+ lines of code** (V0.01+). This provides a tangible reference point for understanding the scale and complexity even of a reduced-scope game and highlights potential challenges in developing a more feature-rich 3D project within our timeframe.
 
 For more detailed features and information about our current (Jan 2025) plans for the 3D project, please check the [A Hero's Redemption Game Plan](A%20Hero's%20Redemption%20Game%20Plan.pdf)
  file.
