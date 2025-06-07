@@ -7,7 +7,7 @@ local M = {} -- Module table to export functions and variables
 
 -- Global references (will be set by main.lua's setGlobals function)
 local player, enemy, resources, animations, battleState, uiState, pauseState,
-      resultState, menuState, optionsState, storyPageState, aboutPageState,
+      resultState, menuState, optionsState, storyPageState, aboutPageState, howToPlayState,
       inventoryState, questLogState, statsScreenState,
       GAME_CONSTANTS, playerSettings, audioState,
       screenWidth, screenHeight, availableResolutions, currentResolutionIndex,
@@ -23,7 +23,7 @@ M.EQUIPPABLE_STATS = {"attack", "defense", "maxHp", "maxMp", "critRate", "critDa
 
 
 function M.setGlobals(
-    p, e, r, a, bs, us, ps, rs, ms, os, sps, aps, is, qls, sss,
+    p, e, r, a, bs, us, ps, rs, ms, os, sps, aps, htps, is, qls, sss,
     gc, ps_settings, as, sw, sh, ar, cri, uim, uimt
 )
     player = p
@@ -41,6 +41,7 @@ function M.setGlobals(
     optionsState = os
     storyPageState = sps
     aboutPageState = aps
+    howToPlayState = htps
     inventoryState = is
     questLogState = qls
     statsScreenState = sss
