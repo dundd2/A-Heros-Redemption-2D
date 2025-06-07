@@ -97,6 +97,9 @@ local GameData = require("game_data") -- Require the new file
 -- Global access to GameData's story state (for convenience)
 local currentState = GameData.story.currentState
 local currentGameLanguage = GameData.getCurrentLanguage() -- Get initial language from GameData
+local previousGameState = "menu" -- For inventory screen toggle
+local uiMessage = ""
+local uiMessageTimer = 0
 
 local function initText()
   GameData.initText() -- Call the initText from GameData
@@ -104,10 +107,7 @@ local function initText()
 end
 
 local function validateLanguage(lang)
-  -- This function is now effectively managed by GameData.getText, no need for a local version.
-  -- It's included here just to satisfy any lingering direct calls, but ideally,
-  -- all text retrieval should go through GameData.getText.
-  return GameData.getText(lang, "dummy_key", nil, lang) -- Use GameData's validation logic indirectly
+  return GameData.getText(lang, "dummy_key", nil, lang)
 end
 
 local function getText(language, key, params, defaultValue)
@@ -116,27 +116,12 @@ end
 
 local function setCurrentLanguage(language)
   GameData.setCurrentLanguage(language)
-  currentGameLanguage = GameData.getCurrentLanguage() -- Sync local variable
+  currentGameLanguage = GameData.getCurrentLanguage()
 end
 
--- Function to get the current language for `main.lua`'s use
 function getCurrentLanguage()
   return currentGameLanguage
 end
-
--- Functions that are now part of GameData and will be called directly
--- function updateTextEffect(dt) -- Call GameData.updateTextEffect(dt)
--- function setTargetText(text) -- Call GameData.setTargetText(text)
--- function getCurrentText() -- Call GameData.getCurrentText()
--- function isTextComplete() -- Call GameData.isTextComplete()
--- function startLevelDialogue(level) -- Call GameData.startLevelDialogue(level)
--- function startEndingDialogue() -- Call GameData.startEndingDialogue()
--- function getCurrentDialogue() -- Call GameData.getCurrentDialogue(resources, currentGameLanguage)
--- function nextDialogue() -- Call GameData.nextDialogue()
--- function skipDialogue() -- Call GameData.skipDialogue()
--- function getEmotionEffect(emotion) -- Call GameData.getEmotionEffect(emotion)
--- function changeRelationship(character, amount) -- Call GameData.changeRelationship(character, amount)
--- function determineEnding() -- Call GameData.determineEnding()
 
 local function loadResource(loadFunc, resourceType, assetPath, ...)
   local success, resource = pcall(loadFunc, assetPath, ...)
@@ -164,7 +149,7 @@ local audioState = {
 playerSettings = {
     isCheatMode = false,
     isInfiniteHP = false,
-    fontScale = 1.0, -- This is technically derived from GAME_CONSTANTS.currentFontSizeIndex
+    fontScale = 1.0,
     isFullScreen = false,
 }
 screenWidth = 1880
@@ -176,7 +161,6 @@ local availableResolutions = {
     {width = 640, height = 360, name = "640x360 (Low)"}
 }
 local currentResolutionIndex = 1
--- local currentGameLanguage = "en" -- Already defined from GameData
 storyPageState = {
   storyText = "",
   scrollPosition = 0,
@@ -217,7 +201,7 @@ GAME_CONSTANTS = {
         BATTLE_CHINESE = 24,
     },
     FONT_SIZE_OPTIONS = {0.8, 1.0, 1.2, 1.5},
-    currentFontSizeIndex = 2, -- Default to 1.0X
+    currentFontSizeIndex = 2,
     TIMER = {
         ACTION_DELAY = 2.0,
         EFFECT_DURATION = 0.5,
@@ -225,7 +209,7 @@ GAME_CONSTANTS = {
     }
 }
 function validateNumber(value, min, max, default)
-    if type(value) ~= "number" or value ~= value then -- value ~= value checks for NaN
+    if type(value) ~= "number" or value ~= value then
         return default
     end
     return math.max(min, math.min(max, value))
@@ -241,6 +225,7 @@ local VALID_GAME_STATES = {
     storyPage = true,
     levelSelect = true,
     aboutPage = true,
+    inventoryScreen = true,
 }
 local VALID_BATTLE_PHASES = {
     select = true,
@@ -266,8 +251,6 @@ function transitionGameState(from, to)
     local validatedTo = validateGameState(to)
     if validatedFrom == validatedTo and from ~= nil then
         if validatedFrom == "options" and to == "options" then
-            -- Allow options to options transition for things like language/font changes
-            -- Screen mode changes are handled by applyResolutionChange() directly
         else
             return false
         end
@@ -293,17 +276,15 @@ function transitionGameState(from, to)
             resources.sounds[GameData.story.levelIntros[currentState.currentLevel].music]:stop()
             print("[AUDIO] Stopped Level Specific BGM.")
         end
-        -- Special handling for ending music, as determineEnding might be called too early
-        -- during a save/load.
-        local endingType = GameData.determineEnding() -- This gets the type, not the music directly
-        if validatedFrom == "ending" then -- Only stop ending music if *leaving* the ending state
+        local endingType = GameData.determineEnding()
+        if validatedFrom == "ending" then
             if GameData.story.ending[endingType] and GameData.story.ending[endingType].music and resources.sounds[GameData.story.ending[endingType].music] and resources.sounds[GameData.story.ending[endingType].music]:isPlaying() then
                 resources.sounds[GameData.story.ending[endingType].music]:stop()
                 print("[AUDIO] Stopped Ending BGM.")
             end
         end
 
-        if validatedTo == "menu" or validatedTo == "options" or validatedTo == "levelSelect" or validatedTo == "storyPage" or validatedTo == "aboutPage" then
+        if validatedTo == "menu" or validatedTo == "options" or validatedTo == "levelSelect" or validatedTo == "storyPage" or validatedTo == "aboutPage" or validatedTo == "inventoryScreen" then
             if resources.sounds.menuBgm then
                 resources.sounds.menuBgm:setLooping(true)
                 resources.sounds.menuBgm:play()
@@ -341,7 +322,7 @@ function transitionGameState(from, to)
                 end
             end
         elseif validatedTo == "ending" then
-            local determinedEndingType = GameData.determineEnding() -- Recalculate ending type
+            local determinedEndingType = GameData.determineEnding()
             local currentEnding = GameData.story.ending[determinedEndingType]
             if currentEnding and currentEnding.music and resources.sounds[currentEnding.music] then
                 resources.sounds[currentEnding.music]:setLooping(false)
@@ -383,6 +364,9 @@ end
 function applyFontSizeChange()
     initFonts()
 end
+
+inventoryState = {}
+
 function love.load()
   print("[GAME] love.load() - Game loading started")
   screenWidth = availableResolutions[currentResolutionIndex].width
@@ -390,18 +374,14 @@ function love.load()
   love.window.setMode(screenWidth, screenHeight, {resizable = false, vsync = true, fullscreen = playerSettings.isFullScreen})
   print("[GAME] Set window mode to " .. screenWidth .. "x" .. screenHeight)
 
-  -- Load loading screen specific assets
-  -- Ensure ui-font.ttf exists in assets, otherwise this will error.
-  -- If it might not exist, add a pcall or fallback to love.graphics.newFont()
-  loadingFont = loadFont("assets/ui-font.ttf", 24) -- Use loadFont helper
+  loadingFont = loadFont("assets/ui-font.ttf", 24)
   creatorLogo = loadImage("assets/author_portrait.png")
-  engineLogo = loadImage("assets/love2d_logo.png") -- Assuming this asset exists
-  gameGroupLogo = loadImage("assets/game_group_logo.png") -- Assuming this asset exists
+  engineLogo = loadImage("assets/love2d_logo.png")
+  gameGroupLogo = loadImage("assets/game_group_logo.png")
 
-  -- Draw initial loading screen
   drawLoadingScreen()
-  love.graphics.present() -- Force draw the loading screen
-  love.timer.sleep(0.5) -- Optional: small delay to ensure it's seen
+  love.graphics.present()
+  love.timer.sleep(0.5)
 
   camera = {
       x = 0,
@@ -476,20 +456,20 @@ resources = {
   fonts = {}
 }
 print("[GAME] Resources loaded")
-initFonts() -- Calls the local initFonts which then calls GameData.initText implicitly via its initial setup
+initFonts()
 enemyData = {
   [1] = {
     image = "enemy_level1_stand",
     attackImage = "enemy_level1_attack",
-    hp = 20, -- Lower for grinding
+    hp = 20,
     maxHp = 20,
     attack = 5,
     defense = 2,
     critRate = 4,
     critDamage = 1.2,
     ai = "basic",
-    expReward = 25, -- NEW
-    displayNameKey = "enemy_name_goblin" -- FIXED PATH
+    expReward = 25,
+    displayNameKey = "enemy_name_goblin"
   },
   [2] = {
     image = "enemy_level2_stand",
@@ -598,14 +578,14 @@ enemyData = {
   [10] = {
     image = "enemy_level10_stand",
     attackImage = "enemy_level10_attack",
-    hp = 200, -- Increased for boss
+    hp = 200,
     maxHp = 200,
     attack = 20,
     defense = 12,
     critRate = 15,
     critDamage = 1.75,
     ai = "tactical",
-    expReward = 500, -- High reward for boss
+    expReward = 500,
     displayNameKey = "enemy_name_demonking"
   }
 }
@@ -651,25 +631,25 @@ print("[GAME] Enemy AI patterns loaded")
   screenHeight = love.graphics.getHeight()
 positions = {
   player = {
-    x = screenWidth * 0.25, -- Adjusted X
+    x = screenWidth * 0.25,
     y = screenHeight * 0.5,
-    scale = 1.0, -- Start with 1.0, let character drawing handle fitting
-    maxWidth = screenWidth * 0.4,
-    maxHeight = screenHeight * 0.6, -- Added max height for character image
-    minHeight = screenHeight * 0.2, -- Added min height for character image
-  },
-  enemy = {
-    x = screenWidth * 0.75, -- Adjusted X
-    y = screenHeight * 0.5,
-    scale = 1.0, -- Start with 1.0, let character drawing handle fitting
+    scale = 1.0,
     maxWidth = screenWidth * 0.4,
     maxHeight = screenHeight * 0.6,
     minHeight = screenHeight * 0.2,
   },
-  playerHP = {x = screenWidth * 0.02, y = screenHeight * 0.02}, -- Relative to screen top-left
-  enemyHP = {x = screenWidth * 0.78, y = screenHeight * 0.02}, -- Relative to screen top-right (will be adjusted for width)
-  playerUI = {x = screenWidth * 0.02, y = screenHeight * 0.75}, -- UI elements on bottom left
-  enemyUI = {x = screenWidth * 0.68, y = screenHeight * 0.75}  -- UI elements on bottom right (if any)
+  enemy = {
+    x = screenWidth * 0.75,
+    y = screenHeight * 0.5,
+    scale = 1.0,
+    maxWidth = screenWidth * 0.4,
+    maxHeight = screenHeight * 0.6,
+    minHeight = screenHeight * 0.2,
+  },
+  playerHP = {x = screenWidth * 0.02, y = screenHeight * 0.02},
+  enemyHP = {x = screenWidth * 0.78, y = screenHeight * 0.02},
+  playerUI = {x = screenWidth * 0.02, y = screenHeight * 0.75},
+  enemyUI = {x = screenWidth * 0.68, y = screenHeight * 0.75}
 }
 print("[GAME] Battle positions defined")
 animations = {
@@ -697,11 +677,11 @@ player = {
   image = resources.images.playerStand,
   hp = 100,
   maxHp = 100,
-  mp = 50, -- NEW
-  maxMp = 50, -- NEW
-  level = 1, -- NEW
-  exp = 0, -- NEW
-  expToNextLevel = 100, -- NEW
+  mp = 50,
+  maxMp = 50,
+  level = 1,
+  exp = 0,
+  expToNextLevel = 100,
   attack = 10,
     critRate = 10,
     critDamage = 1.5,
@@ -709,8 +689,31 @@ player = {
   isDefending = false,
   status = {},
   combo = 0,
+  inventoryCapacity = 20,
+  inventory = {}
 }
 print("[GAME] Player settings initialized (with EXP/MP)")
+for i = 1, player.inventoryCapacity do
+    player.inventory[i] = nil
+end
+
+inventoryState = {
+    selectedSlot = 1,
+    slotCols = 5,
+    slotRows = 4,
+    slotWidth = 100,
+    slotHeight = 80,
+    slotPadding = 10,
+    gridStartX = 50,
+    gridStartY = 100,
+    detailsX = 0,
+    detailsY = 100,
+    uiMessage = "", -- Added for inventory messages
+    uiMessageTimer = 0 -- Added for inventory messages
+}
+inventoryState.slotRows = math.ceil(player.inventoryCapacity / inventoryState.slotCols)
+inventoryState.detailsX = inventoryState.gridStartX + (inventoryState.slotWidth + inventoryState.slotPadding) * inventoryState.slotCols + 20
+
 enemy = {
   x = 600,
   y = 300,
@@ -761,7 +764,6 @@ print("[GAME] Battle state initialized")
     buttonAreas = {},
     navDelay = 0.3,
   }
-  -- Initialize resultState here for Victory/Defeat screens
   resultState = {
     options = {
       {textKey = "result_restart", action = function() restartGame() end},
@@ -811,7 +813,7 @@ print("[GAME] Battle state initialized")
           type = "offensive",
           icon = "skillAttack",
           key = "attack",
-          mpCost = 0 -- NEW
+          mpCost = 0
       },
       {
           name = "Defend",
@@ -820,7 +822,7 @@ print("[GAME] Battle state initialized")
           type = "defensive",
           icon = "skillDefend",
           key = "defend",
-          mpCost = 0 -- NEW
+          mpCost = 0
       },
       {
           name = "Special Attack",
@@ -829,7 +831,7 @@ print("[GAME] Battle state initialized")
           type = "offensive",
           icon = "skillSpecial",
           key = "special",
-          mpCost = 20 -- NEW
+          mpCost = 20
       },
       {
           name = "Heal",
@@ -838,7 +840,7 @@ print("[GAME] Battle state initialized")
           type = "support",
           icon = "skillHeal",
           key = "heal",
-          mpCost = 15 -- NEW
+          mpCost = 15
       }
   }
   print("[GAME] Skill info loaded")
@@ -848,8 +850,8 @@ print("[GAME] Battle state initialized")
       {textKey = "menu_options", action = function() transitionGameState(gameState, "options") end, descriptionKey = "menu_options_desc"},
       {textKey = "menu_story_page", action = function() transitionGameState(gameState, "storyPage") end, descriptionKey = "menu_story_page_desc"},
       {textKey = "menu_about", action = function() transitionGameState(gameState, "aboutPage") end, descriptionKey = "menu_about_desc"},
-      {textKey = "menu_save_game", action = function() saveGame() end, descriptionKey = "menu_save_game_desc"}, -- NEW
-      {textKey = "menu_load_game", action = function() loadGame() end, descriptionKey = "menu_load_game_desc"}, -- NEW
+      {textKey = "menu_save_game", action = function() saveGame() end, descriptionKey = "menu_save_game_desc"},
+      {textKey = "menu_load_game", action = function() loadGame() end, descriptionKey = "menu_load_game_desc"},
       {textKey = "menu_exit", action = function() love.event.quit() end, descriptionKey = "menu_exit_desc"}
     },
     currentOption = 1,
@@ -891,6 +893,11 @@ print("[GAME] Battle state initialized")
     storyPageState.storyText = GameData.getText(currentGameLanguage, "game_full_story")
     aboutPageState.storyText = GameData.getText(currentGameLanguage, "about_project")
     aboutPageState.staffText = GameData.getText(currentGameLanguage, "about_staff")
+
+  previousGameState = "menu"
+  uiMessage = ""
+  uiMessageTimer = 0
+
   resources.images.palace = resources.images.background
   resources.images.forest = resources.images.background
   resources.images.demonCastle = resources.images.background
@@ -946,7 +953,7 @@ print("[GAME] Battle state initialized")
     love.graphics.print("Critical resources failed to load.\nPlease check the console for details.", 100, 100)
     love.event.quit()
   end
-  loadingState = false -- Set loading state to false after all loading is done
+  loadingState = false
   transitionGameState(nil, "menu")
 end
 TimerSystem = {
@@ -1058,6 +1065,14 @@ function resumeBattle()
 end
 function love.update(dt)
     updateTimers(dt)
+
+    if uiMessageTimer > 0 then
+        uiMessageTimer = uiMessageTimer - dt
+        if uiMessageTimer <= 0 then
+            uiMessage = ""
+        end
+    end
+
     if gameState == "menu" then
         handleMenuInput(dt)
     elseif gameState == "levelSelect" then
@@ -1071,18 +1086,18 @@ function love.update(dt)
         if battleState.messageTimer > 0 then
             battleState.messageTimer = battleState.messageTimer - dt
         end
-        if enemy.hp <= 0 then -- Victory condition check
+        if enemy.hp <= 0 then
             local currentEnemyData = enemyData[menuState.levelSelect.currentLevel]
             if currentEnemyData and currentEnemyData.expReward then
-                grantExp(currentEnemyData.expReward) -- NEW: Grant EXP on victory
+                grantExp(currentEnemyData.expReward)
             end
             battleState.phase = "result"
-            TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY + (battleState.messageTimer > 0 and battleState.messageTimer or 0), function() -- Wait for message to clear
+            TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY + (battleState.messageTimer > 0 and battleState.messageTimer or 0), function()
                 transitionGameState(gameState, "victory")
             end, TIMER_GROUPS.BATTLE)
-        elseif player.hp <= 0 then -- Defeat condition check
+        elseif player.hp <= 0 then
             battleState.phase = "result"
-            TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY + (battleState.messageTimer > 0 and battleState.messageTimer or 0), function() -- Wait for message to clear
+            TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY + (battleState.messageTimer > 0 and battleState.messageTimer or 0), function()
                 transitionGameState(gameState, "defeat")
             end, TIMER_GROUPS.BATTLE)
         end
@@ -1094,12 +1109,14 @@ function love.update(dt)
         handleStoryPageInput(dt)
     elseif gameState == "aboutPage" then
         handleAboutPageInput(dt)
+    elseif gameState == "inventoryScreen" then
+        -- uiMessageTimer is handled globally now
     end
 end
 function love.draw()
   if loadingState then
     drawLoadingScreen()
-    return -- Stop drawing the rest of the game
+    return
   end
   love.graphics.push()
   love.graphics.scale(camera.scale, camera.scale)
@@ -1123,7 +1140,6 @@ function love.draw()
     drawBattleScene()
     drawCharacters()
     drawBattleUI()
-
     drawPauseUI()
   elseif gameState == "victory" then
     drawVictoryUI()
@@ -1135,9 +1151,89 @@ function love.draw()
     drawStoryPageUI()
   elseif gameState == "aboutPage" then
     drawAboutPageUI()
+  elseif gameState == "inventoryScreen" then
+    drawInventoryScreen()
   end
   love.graphics.pop()
 end
+
+function drawInventoryScreen()
+    local windowWidth = love.graphics.getWidth()
+    local windowHeight = love.graphics.getHeight()
+    love.graphics.clear(0.1, 0.1, 0.1, 1)
+
+    local titleFont = resources.fonts.battle or resources.fonts.ui
+    local itemFont = resources.fonts.ui
+    local descFont = resources.fonts.ui
+
+    love.graphics.setFont(titleFont)
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.printf("Inventory", 0, 20, windowWidth, "center")
+
+    love.graphics.setFont(itemFont)
+    for i = 1, player.inventoryCapacity do
+        local row = math.floor((i - 1) / inventoryState.slotCols)
+        local col = (i - 1) % inventoryState.slotCols
+        local x = inventoryState.gridStartX + col * (inventoryState.slotWidth + inventoryState.slotPadding)
+        local y = inventoryState.gridStartY + row * (inventoryState.slotHeight + inventoryState.slotPadding)
+
+        if i == inventoryState.selectedSlot then
+            love.graphics.setColor(1, 1, 0, 0.5)
+            love.graphics.rectangle("fill", x, y, inventoryState.slotWidth, inventoryState.slotHeight)
+            love.graphics.setColor(1, 1, 0)
+        else
+            love.graphics.setColor(0.3, 0.3, 0.3)
+        end
+        love.graphics.rectangle("line", x, y, inventoryState.slotWidth, inventoryState.slotHeight)
+
+        love.graphics.setColor(1,1,1)
+        local item = player.inventory[i]
+        if item then
+            local itemData = GameData.story.items[item.itemId]
+            if itemData then
+                local itemName = GameData.getText(currentGameLanguage, itemData.name_key, nil, item.itemId)
+                love.graphics.printf(itemName, x + 5, y + 5, inventoryState.slotWidth - 10, "left")
+                if itemData.stackable then
+                    love.graphics.printf("x" .. item.quantity, x + 5, y + inventoryState.slotHeight - 25, inventoryState.slotWidth - 10, "right")
+                end
+            else
+                 love.graphics.printf("Unknown", x + 5, y + 5, inventoryState.slotWidth - 10, "left")
+            end
+        end
+    end
+
+    local selectedItem = player.inventory[inventoryState.selectedSlot]
+    if selectedItem then
+        local itemData = GameData.story.items[selectedItem.itemId]
+        if itemData then
+            love.graphics.setFont(itemFont)
+            love.graphics.setColor(1,1,1)
+            love.graphics.printf(GameData.getText(currentGameLanguage, itemData.name_key), inventoryState.detailsX, inventoryState.detailsY, windowWidth - inventoryState.detailsX - 20, "left")
+
+            love.graphics.setFont(descFont)
+            love.graphics.setColor(0.8, 0.8, 0.8)
+            love.graphics.printf(GameData.getText(currentGameLanguage, itemData.description_key), inventoryState.detailsX, inventoryState.detailsY + 30, windowWidth - inventoryState.detailsX - 20, "left")
+
+            if itemData.type == "consumable" then
+                love.graphics.setFont(itemFont)
+                love.graphics.setColor(0.7, 1, 0.7)
+                love.graphics.printf("Press Enter to Use", inventoryState.detailsX, inventoryState.detailsY + 80, windowWidth - inventoryState.detailsX - 20, "left")
+            end
+        end
+    end
+
+    if uiMessage and uiMessageTimer > 0 then
+        love.graphics.setFont(itemFont)
+        love.graphics.setColor(1,1,0) -- Yellow for UI messages
+        local msgWidth = itemFont:getWidth(uiMessage)
+        love.graphics.printf(uiMessage, windowWidth / 2 - msgWidth / 2, windowHeight - 70, windowWidth, "center")
+    end
+
+    love.graphics.setFont(itemFont)
+    love.graphics.setColor(0.8,0.8,0.8)
+    love.graphics.printf("Use Arrow Keys to Navigate, I to Close, Enter to Use", inventoryState.gridStartX, windowHeight - 40, windowWidth - inventoryState.gridStartX*2, "center")
+end
+
 local uiLayoutConfig = {
   mainMenu = {
     titleOffsetY = 0.2,
@@ -1259,7 +1355,7 @@ function drawStoryDialogue()
     love.graphics.draw(resources.images.background, 0, 0, 0,
         windowWidth/resources.images.background:getWidth(),
         windowHeight/resources.images.background:getHeight())
-    local currentDialogue = GameData.getCurrentDialogue(resources, currentGameLanguage) -- Pass resources and language
+    local currentDialogue = GameData.getCurrentDialogue(resources, currentGameLanguage)
     if not currentDialogue then return end
     local currentLevelData = GameData.story.levelIntros[currentState.currentLevel]
     if currentLevelData and currentLevelData.background then
@@ -1270,19 +1366,18 @@ function drawStoryDialogue()
                 windowHeight/resources.images[bgKey]:getHeight())
         end
     end
-    -- Revised dialog box positioning and sizing
-    local bottomMargin = windowHeight * 0.05 -- 5% from bottom
-    local dialogBoxHeight = windowHeight * 0.2 -- 20% of screen height
+    local bottomMargin = windowHeight * 0.05
+    local dialogBoxHeight = windowHeight * 0.2
     local dialogBoxWidth = windowWidth * 0.8
     local dialogBoxX = (windowWidth - dialogBoxWidth) / 2
-    local dialogBoxY = windowHeight - dialogBoxHeight - bottomMargin -- Position from bottom
+    local dialogBoxY = windowHeight - dialogBoxHeight - bottomMargin
     
     local portraitImage = currentDialogue.portraitKey and resources.images[currentDialogue.portraitKey] or nil
-    local maxPortraitWidth = dialogBoxHeight -- Portrait can be as wide as dialog box height
+    local maxPortraitWidth = dialogBoxHeight
     local portraitDrawWidth = 0
     local portraitDrawHeight = 0
     local portraitDrawX = dialogBoxX + 10
-    local portraitDrawY = dialogBoxY + 10 -- Relative to dialog box top
+    local portraitDrawY = dialogBoxY + 10
     if portraitImage then
         portraitDrawWidth = math.min(portraitImage:getWidth(), maxPortraitWidth)
         portraitDrawHeight = portraitDrawWidth * (portraitImage:getHeight() / portraitImage:getWidth())
@@ -1308,7 +1403,7 @@ function drawStoryDialogue()
             local enemyDrawWidth = enemyImage:getWidth() * enemyScale
             local enemyDrawHeight = enemyImage:getHeight() * enemyScale
             local enemyDrawX = windowWidth - enemyDrawWidth - (windowWidth * 0.05)
-            local enemyDrawY = dialogBoxY - enemyDrawHeight + 20 -- Adjusted to be above the dialog box
+            local enemyDrawY = dialogBoxY - enemyDrawHeight + 20
             love.graphics.setColor(1, 1, 1)
             love.graphics.draw(enemyImage, enemyDrawX, enemyDrawY, 0, enemyScale, enemyScale)
         end
@@ -1331,7 +1426,7 @@ function drawStoryDialogue()
     love.graphics.setFont(fontBattleStory)
     love.graphics.setColor(1, 1, 0)
     local speakerNameX = portraitImage and (portraitDrawX + portraitDrawWidth - fontBattleStory:getWidth(currentDialogue.speaker)) or (dialogBoxX + 20)
-    local speakerNameY = portraitImage and portraitDrawY or (dialogBoxY + 10) -- Speaker name above portrait or dialog box
+    local speakerNameY = portraitImage and portraitDrawY or (dialogBoxY + 10)
     love.graphics.print(currentDialogue.speaker, speakerNameX, speakerNameY)
     if GameData.isTextComplete() then
         love.graphics.setColor(1, 1, 1, 0.5 + math.sin(love.timer.getTime() * 5) * 0.5)
@@ -1498,13 +1593,11 @@ function drawCharacters()
   local windowWidth = love.graphics.getWidth()
   local windowHeight = love.graphics.getHeight()
 
-  -- Player Character
   local playerImage = animations.player.current == "stand" and resources.images.playerStand or resources.images.playerAttack
   local playerScaleX = positions.player.maxWidth / playerImage:getWidth()
   local playerScaleY = positions.player.maxHeight / playerImage:getHeight()
-  local playerScale = math.min(playerScaleX, playerScaleY) -- Scale to fit within both max width and max height
+  local playerScale = math.min(playerScaleX, playerScaleY)
 
-  -- Ensure it's not too small
   if playerImage:getHeight() * playerScale < positions.player.minHeight then
       playerScale = positions.player.minHeight / playerImage:getHeight()
   end
@@ -1513,16 +1606,14 @@ function drawCharacters()
   local playerDrawY = positions.player.y - (playerImage:getHeight() * playerScale) / 2
   love.graphics.draw(playerImage, playerDrawX, playerDrawY, 0, playerScale, playerScale)
 
-  -- Enemy Character
   local currentEnemyData = enemyData[menuState.levelSelect.currentLevel]
   local enemyImageKey = animations.enemy.current == "attack" and (currentEnemyData.attackImage or currentEnemyData.image) or currentEnemyData.image
   local enemyImage = resources.images[enemyImageKey] or resources.images.enemyDemonKing
 
   local enemyScaleX = positions.enemy.maxWidth / enemyImage:getWidth()
   local enemyScaleY = positions.enemy.maxHeight / enemyImage:getHeight()
-  local enemyScale = math.min(enemyScaleX, enemyScaleY) -- Scale to fit within both max width and max height
+  local enemyScale = math.min(enemyScaleX, enemyScaleY)
 
-  -- Ensure it's not too small
   if enemyImage:getHeight() * enemyScale < positions.enemy.minHeight then
       enemyScale = positions.enemy.minHeight / enemyImage:getHeight()
   end
@@ -1545,20 +1636,18 @@ function drawBattleUI()
   love.graphics.setFont(fontUI)
   love.graphics.setColor(1, 1, 1)
 
-  -- UI Frame for player actions (dynamically scaled)
-  local uiFrameWidth = windowWidth * 0.3 -- Make it 30% of screen width
-  local uiFrameHeight = windowHeight * 0.25 -- 25% of screen height
-  local uiFrameX = windowWidth * 0.02 -- Left side, small margin
-  local uiFrameY = windowHeight * 0.73 -- Bottom, leaving space for skill icons below if needed
+  local uiFrameWidth = windowWidth * 0.3
+  local uiFrameHeight = windowHeight * 0.25
+  local uiFrameX = windowWidth * 0.02
+  local uiFrameY = windowHeight * 0.73
 
   local uiFrameImage = resources.images.uiFrame
   local uiFrameScaleX = uiFrameWidth / uiFrameImage:getWidth()
   local uiFrameScaleY = uiFrameHeight / uiFrameImage:getHeight()
   love.graphics.draw(uiFrameImage, uiFrameX, uiFrameY, 0, uiFrameScaleX, uiFrameScaleY)
 
-  -- HP Bar (Player)
-  local hpBarWidth = windowWidth * 0.2  -- 20% of screen width
-  local hpBarHeight = windowHeight * 0.03 -- 3% of screen height
+  local hpBarWidth = windowWidth * 0.2
+  local hpBarHeight = windowHeight * 0.03
   local playerHpX = windowWidth * 0.02
   local playerHpY = windowHeight * 0.02
 
@@ -1567,27 +1656,25 @@ function drawBattleUI()
   love.graphics.setColor(0, 1, 0)
   love.graphics.rectangle("fill", playerHpX, playerHpY, (player.hp / player.maxHp) * hpBarWidth, hpBarHeight)
   love.graphics.setColor(1, 1, 1)
-  local playerHpText = string.format("HP: %d / %d", math.floor(player.hp), math.floor(player.maxHp)) -- Changed to show HP
+  local playerHpText = string.format("HP: %d / %d", math.floor(player.hp), math.floor(player.maxHp))
   local playerHpTextWidth = fontUI:getWidth(playerHpText)
   love.graphics.print(playerHpText, playerHpX + hpBarWidth / 2 - playerHpTextWidth / 2, playerHpY + hpBarHeight + 5)
 
-  -- MP Bar (Player) -- NEW
-  local mpBarWidth = hpBarWidth * 0.8 -- Slightly smaller than HP
+  local mpBarWidth = hpBarWidth * 0.8
   local mpBarHeight = windowHeight * 0.02
-  local playerMpX = playerHpX + hpBarWidth - mpBarWidth - 5 -- Below HP bar, right-aligned with HP
-  local playerMpY = playerHpY + hpBarHeight + 5 + fontUI:getHeight() + 5 -- Below HP text
-  love.graphics.setColor(0, 0, 1) -- Blue for MP
+  local playerMpX = playerHpX + hpBarWidth - mpBarWidth - 5
+  local playerMpY = playerHpY + hpBarHeight + 5 + fontUI:getHeight() + 5
+  love.graphics.setColor(0, 0, 1)
   love.graphics.rectangle("fill", playerMpX, playerMpY, mpBarWidth, mpBarHeight)
-  love.graphics.setColor(0.5, 0.5, 1) -- Lighter blue for filled
+  love.graphics.setColor(0.5, 0.5, 1)
   love.graphics.rectangle("fill", playerMpX, playerMpY, (player.mp / player.maxMp) * mpBarWidth, mpBarHeight)
   love.graphics.setColor(1, 1, 1)
   local playerMpText = string.format("MP: %d / %d", math.floor(player.mp), math.floor(player.maxMp))
   local playerMpTextWidth = fontUI:getWidth(playerMpText)
   love.graphics.print(playerMpText, playerMpX + mpBarWidth / 2 - playerMpTextWidth / 2, playerMpY + mpBarHeight + 5)
 
-  -- Player Stats Display -- NEW
   local statsX = playerHpX
-  local statsY = playerHpY + hpBarHeight + 5 + fontUI:getHeight() * 2 + 10 -- Below MP bar
+  local statsY = playerHpY + hpBarHeight + 5 + fontUI:getHeight() * 2 + 10
   love.graphics.print(string.format("LV: %d", player.level), statsX, statsY)
   love.graphics.print(string.format("EXP: %d/%d", player.exp, player.expToNextLevel), statsX, statsY + fontUI:getHeight())
 
@@ -1596,9 +1683,7 @@ function drawBattleUI()
   love.graphics.print(GameData.getText(currentGameLanguage, "player_stats_crit_rate") .. ": " .. player.critRate .. "%", statsX + 200, statsY)
   love.graphics.print(GameData.getText(currentGameLanguage, "player_stats_crit_damage") .. ": " .. player.critDamage .. "X", statsX + 200, statsY + fontUI:getHeight())
 
-
-  -- HP Bar (Enemy)
-  local enemyHpX = windowWidth * 0.98 - hpBarWidth -- Align to right edge
+  local enemyHpX = windowWidth * 0.98 - hpBarWidth
   local enemyHpY = windowHeight * 0.02
 
   love.graphics.setColor(1, 0, 0)
@@ -1609,7 +1694,6 @@ function drawBattleUI()
   local enemyHpText = string.format("HP: %d / %d", math.floor(enemy.hp), math.floor(enemy.maxHp))
   local enemyHpTextWidth = fontUI:getWidth(enemyHpText)
   love.graphics.print(enemyHpText, enemyHpX + hpBarWidth / 2 - enemyHpTextWidth / 2, enemyHpY + hpBarHeight + 5)
-  -- Enemy Name -- NEW
   local currentEnemyData = enemyData[menuState.levelSelect.currentLevel]
   local enemyName = GameData.getText(currentGameLanguage, currentEnemyData.displayNameKey)
   local enemyNameWidth = fontUI:getWidth(enemyName)
@@ -1619,11 +1703,11 @@ function drawBattleUI()
   if battleState.phase == "select" then
     battleState.buttonAreas = {}
     love.graphics.setColor(1, 1, 1)
-    local optionStartX = uiFrameX + uiFrameWidth * 0.05 -- Relative to UI frame, small margin
+    local optionStartX = uiFrameX + uiFrameWidth * 0.05
     local optionStartY = uiFrameY + uiFrameHeight * 0.05
-    local optionButtonWidth = uiFrameWidth * 0.9 -- 90% of UI frame width
-    local optionButtonHeight = uiFrameHeight * 0.2 -- 20% of UI frame height
-    local optionSpacing = uiFrameHeight * 0.25 -- Spacing between buttons (height + padding)
+    local optionButtonWidth = uiFrameWidth * 0.9
+    local optionButtonHeight = uiFrameHeight * 0.2
+    local optionSpacing = uiFrameHeight * 0.25
 
     for i, option in ipairs(battleState.options) do
       local optionY = optionStartY + (i-1) * optionSpacing
@@ -1646,12 +1730,11 @@ function drawBattleUI()
     end
   end
 
-  -- Skill Icons (bottom of screen)
-  local iconSize = windowHeight * 0.08 -- 8% of screen height for icon size
-  local iconSpacing = windowWidth * 0.02 -- 2% of screen width for spacing
+  local iconSize = windowHeight * 0.08
+  local iconSpacing = windowWidth * 0.02
   local totalIconsWidth = (#skillInfo * iconSize) + ((#skillInfo - 1) * iconSpacing)
-  local skillIconsStartX = (windowWidth - totalIconsWidth) / 2 -- Center horizontally
-  local skillIconsStartY = windowHeight * 0.9 -- 90% down the screen (bottom margin)
+  local skillIconsStartX = (windowWidth - totalIconsWidth) / 2
+  local skillIconsStartY = windowHeight * 0.9
 
   for i, skill in ipairs(skillInfo) do
     love.graphics.setColor(1, 1, 1)
@@ -1668,9 +1751,8 @@ function drawBattleUI()
         love.graphics.print("?", skillIconsStartX + (i-1) * (iconSize + iconSpacing) + iconSize/2 - 5, skillIconsStartY + iconSize/2 - 10)
         love.graphics.setColor(1,1,1)
     end
-    -- Cooldown and MP Cost Overlay -- UPDATED
     local cooldown = skillSystem[skill.key].cooldown
-    local mpCost = skill.mpCost or 0 -- Get MP cost from skillInfo
+    local mpCost = skill.mpCost or 0
 
     if cooldown > 0 or player.mp < mpCost then
       love.graphics.setColor(0, 0, 0, 0.7)
@@ -1694,7 +1776,7 @@ function drawBattleUI()
         love.graphics.print(mpCost,
           skillIconsStartX + (i-1) * (iconSize + iconSpacing) + iconSize/2 - fontUI:getWidth(tostring(mpCost))/2,
           skillIconsStartY + iconSize/2 - fontUI:getHeight()/2)
-        love.graphics.setColor(1, 0.5, 0.5) -- Reddish tint for insufficient MP number
+        love.graphics.setColor(1, 0.5, 0.5)
       end
     end
   end
@@ -1725,22 +1807,21 @@ function drawBattleMessage()
             fontBattleMsg = resources.fonts.chineseBattle
         end
         love.graphics.setFont(fontBattleMsg)
-        -- Check for common strings to color messages
         if string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_enemy_attack", {damage=0})) or
            string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_enemy_crit", {damage=0})) or
            string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_enemy_defend")) then
-            love.graphics.setColor(1, 0, 0) -- Red for enemy actions
+            love.graphics.setColor(1, 0, 0)
         elseif string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_player_attack", {damage=0})) or
                string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_player_crit", {damage=0})) or
                string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_player_defend")) or
                string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_player_special", {damage=0})) or
                string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_player_heal", {healAmount=0})) then
-            love.graphics.setColor(0, 1, 0) -- Green for player actions
-        elseif string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_exp_gain", {exp=0})) or -- NEW EXP MSG
-               string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_level_up", {level=0})) then -- NEW LEVEL UP MSG
-            love.graphics.setColor(0, 0.8, 0.8) -- Cyan for progression messages
+            love.graphics.setColor(0, 1, 0)
+        elseif string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_exp_gain", {exp=0})) or
+               string.find(battleState.message, GameData.getText(currentGameLanguage, "battle_msg_level_up", {level=0})) then
+            love.graphics.setColor(0, 0.8, 0.8)
         else
-            love.graphics.setColor(1, 1, 0) -- Yellow for generic messages
+            love.graphics.setColor(1, 1, 0)
         end
         local textWidth = fontBattleMsg:getWidth(battleState.message)
         love.graphics.print(battleState.message,
@@ -1973,7 +2054,7 @@ function handleOptionsInput(dt)
           currentOption.currentOption = #currentOption.languageOptions
         end
         currentGameLanguage = currentOption.languageOptions[currentOption.currentOption]
-        setCurrentLanguage(currentGameLanguage) -- Use the new setCurrentLanguage
+        setCurrentLanguage(currentGameLanguage)
         storyPageState.storyText = GameData.getText(currentGameLanguage, "game_full_story")
         aboutPageState.storyText = GameData.getText(currentGameLanguage, "about_project")
         aboutPageState.staffText = GameData.getText(currentGameLanguage, "about_staff")
@@ -2003,7 +2084,7 @@ function handleOptionsInput(dt)
           currentOption.currentOption = 1
         end
         currentGameLanguage = currentOption.languageOptions[currentOption.currentOption]
-        setCurrentLanguage(currentGameLanguage) -- Use the new setCurrentLanguage
+        setCurrentLanguage(currentGameLanguage)
         storyPageState.storyText = GameData.getText(currentGameLanguage, "game_full_story")
         aboutPageState.storyText = GameData.getText(currentGameLanguage, "about_project")
         aboutPageState.staffText = GameData.getText(currentGameLanguage, "about_staff")
@@ -2043,7 +2124,7 @@ function applyResolutionChange()
   love.window.setMode(screenWidth, screenHeight, {resizable = false, vsync = true, fullscreen = playerSettings.isFullScreen})
   print("[GAME] Resolution changed to " .. screenWidth .. "x" .. screenHeight)
     positions.player = {
-        x = screenWidth * 0.25, -- Adjusted X
+        x = screenWidth * 0.25,
         y = screenHeight * 0.5,
         scale = 1.0,
         maxWidth = screenWidth * 0.4,
@@ -2051,7 +2132,7 @@ function applyResolutionChange()
         minHeight = screenHeight * 0.2,
     }
     positions.enemy = {
-        x = screenWidth * 0.75, -- Adjusted X
+        x = screenWidth * 0.75,
         y = screenHeight * 0.5,
         scale = 1.0,
         maxWidth = screenWidth * 0.4,
@@ -2059,7 +2140,7 @@ function applyResolutionChange()
         minHeight = screenHeight * 0.2,
     }
     positions.playerHP = {x = screenWidth * 0.02, y = screenHeight * 0.02}
-    positions.enemyHP = {x = screenWidth * 0.78, y = screenHeight * 0.02} -- Adjusted X
+    positions.enemyHP = {x = screenWidth * 0.78, y = screenHeight * 0.02}
     positions.playerUI = {x = screenWidth * 0.02, y = screenHeight * 0.75}
     positions.enemyUI = {x = screenWidth * 0.68, y = screenHeight * 0.75}
     animations.player.x = positions.player.x
@@ -2195,6 +2276,57 @@ function love.keypressed(key)
       aboutPageState.scrollPosition = 0
       print("[GAME STATE] Game state changed to 'menu' from aboutPage")
     end
+  elseif gameState == "inventoryScreen" then
+    if key == "up" then
+        inventoryState.selectedSlot = inventoryState.selectedSlot - inventoryState.slotCols
+    elseif key == "down" then
+        inventoryState.selectedSlot = inventoryState.selectedSlot + inventoryState.slotCols
+    elseif key == "left" then
+        inventoryState.selectedSlot = inventoryState.selectedSlot - 1
+    elseif key == "right" then
+        inventoryState.selectedSlot = inventoryState.selectedSlot + 1
+    elseif key == "return" or key == "space" then
+        local itemInSlot = player.inventory[inventoryState.selectedSlot]
+        if itemInSlot then
+            useItem(inventoryState.selectedSlot)
+        end
+    end
+    -- Clamp selectedSlot to be within bounds
+    if inventoryState.selectedSlot < 1 then
+        inventoryState.selectedSlot = 1
+    elseif inventoryState.selectedSlot > player.inventoryCapacity then
+        inventoryState.selectedSlot = player.inventoryCapacity
+    end
+  end
+
+  if key == "i" then
+    if gameState == "inventoryScreen" then
+      if previousGameState then
+        transitionGameState(gameState, previousGameState)
+        previousGameState = nil
+      else
+        transitionGameState(gameState, "menu")
+      end
+    elseif gameState == "battle" or gameState == "menu" then
+      previousGameState = gameState
+      transitionGameState(gameState, "inventoryScreen")
+    end
+  end
+
+  if key == "p" then
+    if addItemToInventory("potion_health_1", 1) then
+        print("[CHEAT] Added 1 Health Potion to inventory.")
+        if gameState == "battle" or gameState == "inventoryScreen" or gameState == "menu" then
+            uiMessage = "Added Health Potion!"
+            uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+        end
+    else
+        print("[CHEAT] Failed to add Health Potion (Inventory full?).")
+        if gameState == "battle" or gameState == "inventoryScreen" or gameState == "menu" then
+            uiMessage = "Failed to add potion! Inventory full?"
+            uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+        end
+    end
   end
 end
 function handleOptionsInputReturn()
@@ -2205,9 +2337,9 @@ function handleOptionsInputReturn()
     targetState[option.state] = not oldState
     print("[OPTIONS MENU] Toggled option: " .. GameData.getText(currentGameLanguage, option.textKey) .. ", new state: " .. tostring(targetState[option.state]))
     if option.state == "isMutedBGM" then
-      transitionGameState(gameState, gameState) -- For BGM
-    elseif option.state == "isFullScreen" then -- ADD THIS CHECK
-        applyResolutionChange() -- Call the function that applies screen settings
+      transitionGameState(gameState, gameState)
+    elseif option.state == "isFullScreen" then
+        applyResolutionChange()
     end
   elseif option.action then
     option.action()
@@ -2442,7 +2574,6 @@ function love.mousepressed(x, y, button, istouch, presses)
     elseif gameState == "story" then
       local windowWidth = love.graphics.getWidth()
       local windowHeight = love.graphics.getHeight()
-      -- Use the same calculation for dialog box area as in drawStoryDialogue
       local bottomMargin = windowHeight * 0.05
       local dialogBoxHeight = windowHeight * 0.2
       local dialogBoxWidth = windowWidth * 0.8
@@ -2451,7 +2582,7 @@ function love.mousepressed(x, y, button, istouch, presses)
       
       if isPointInRect(x, y, {x = dialogBoxX, y = dialogBoxY, width = dialogBoxWidth, height = dialogBoxHeight}) then
         if GameData.isTextComplete() then
-            handleStoryInput(0.61) -- Trigger continue
+            handleStoryInput(0.61)
             print("[STORY] Dialogue box clicked, continuing story")
             handled = true
         end
@@ -2471,7 +2602,7 @@ end
 function restartGame()
 print("[GAME] Restarting game...")
 player.hp = player.maxHp
-player.mp = player.maxMp -- NEW: Also restore MP on restart
+player.mp = player.maxMp
 player.isDefending = false
 player.combo = 0
 print("[GAME] Player settings reset")
@@ -2510,7 +2641,6 @@ print("[GAME] Enemy settings loaded for level " .. menuState.levelSelect.current
       buttonAreas = {},
       effects = {}
   }
-  -- Reset skill cooldowns
   for _, skill in pairs(skillSystem) do
     skill.cooldown = 0
   end
@@ -2562,7 +2692,7 @@ local function calculateDamage(attacker, defender)
         GAME_CONSTANTS.MIN_DAMAGE
     )
     if attacker == player and playerSettings.isCheatMode then
-        damage = defender.hp + 1000 -- One-shot kill
+        damage = defender.hp + 1000
     end
     if defender == player and playerSettings.isInfiniteHP then
         damage = 0
@@ -2571,7 +2701,6 @@ local function calculateDamage(attacker, defender)
     return damage, isCrit
 end
 
--- NEW: Function to grant EXP and check for level up
 function grantExp(amount)
     player.exp = player.exp + amount
     battleState.message = GameData.getText(currentGameLanguage, "battle_msg_exp_gain", {exp = amount})
@@ -2580,29 +2709,207 @@ function grantExp(amount)
     checkLevelUp()
 end
 
--- NEW: Function to check for and apply level ups
 function checkLevelUp()
     while player.exp >= player.expToNextLevel do
         player.exp = player.exp - player.expToNextLevel
         player.level = player.level + 1
-        player.expToNextLevel = math.floor(player.expToNextLevel * 1.5) -- Example: EXP needed increases by 50%
+        player.expToNextLevel = math.floor(player.expToNextLevel * 1.5)
         
-        -- Increase player stats on level up
         player.maxHp = player.maxHp + 10
-        player.hp = player.hp + 10 -- Recover HP on level up, or set to maxHp
+        player.hp = player.hp + 10
         player.maxMp = player.maxMp + 5
-        player.mp = player.mp + 5 -- Recover MP on level up, or set to maxMp
+        player.mp = player.mp + 5
         player.attack = player.attack + 2
         player.defense = player.defense + 1
-        player.critRate = math.min(GAME_CONSTANTS.MAX_CRIT_RATE, player.critRate + 0.5) -- Cap crit rate
-        player.critDamage = math.min(GAME_CONSTANTS.MAX_CRIT_DAMAGE, player.critDamage + 0.05) -- Cap crit damage
+        player.critRate = math.min(GAME_CONSTANTS.MAX_CRIT_RATE, player.critRate + 0.5)
+        player.critDamage = math.min(GAME_CONSTANTS.MAX_CRIT_DAMAGE, player.critDamage + 0.05)
 
         battleState.message = GameData.getText(currentGameLanguage, "battle_msg_level_up", {level = player.level})
-        battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION + 1 -- Longer message for level up
+        battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION + 1
         print(string.format("[GAME] Player leveled up to LV %d! HP: %d/%d, MP: %d/%d, ATK: %d, DEF: %d, CRT: %.1f, CRD: %.2f",
                             player.level, player.hp, player.maxHp, player.mp, player.maxMp, player.attack, player.defense, player.critRate, player.critDamage))
     end
 end
+
+-- Inventory Management Functions
+function addItemToInventory(itemId, quantity)
+    if not itemId or not quantity or quantity <= 0 then
+        print("[INVENTORY ERROR] Invalid itemId or quantity for addItemToInventory.")
+        return false
+    end
+
+    local itemData = GameData.story.items[itemId]
+    if not itemData then
+        print("[INVENTORY ERROR] Item data not found for itemId: " .. itemId)
+        return false
+    end
+
+    local remainingQuantity = quantity
+
+    if itemData.stackable then
+        for i = 1, player.inventoryCapacity do
+            local slot = player.inventory[i]
+            if slot and slot.itemId == itemId and slot.quantity < itemData.maxStack then
+                local canAdd = itemData.maxStack - slot.quantity
+                if remainingQuantity <= canAdd then
+                    slot.quantity = slot.quantity + remainingQuantity
+                    remainingQuantity = 0
+                    print("[INVENTORY] Added " .. quantity .. " of " .. itemId .. " to existing stack in slot " .. i)
+                    return true
+                else
+                    slot.quantity = itemData.maxStack
+                    remainingQuantity = remainingQuantity - canAdd
+                    print("[INVENTORY] Filled stack in slot " .. i .. " with " .. itemId .. ". Remaining: " .. remainingQuantity)
+                end
+            end
+            if remainingQuantity == 0 then return true end
+        end
+    end
+
+    if remainingQuantity > 0 then
+        for i = 1, player.inventoryCapacity do
+            if player.inventory[i] == nil then
+                if itemData.stackable then
+                    local amountToAdd = math.min(remainingQuantity, itemData.maxStack)
+                    player.inventory[i] = {itemId = itemId, quantity = amountToAdd}
+                    remainingQuantity = remainingQuantity - amountToAdd
+                    print("[INVENTORY] Added " .. amountToAdd .. " of " .. itemId .. " to new slot " .. i)
+                else
+                    player.inventory[i] = {itemId = itemId, quantity = 1}
+                    remainingQuantity = remainingQuantity - 1
+                    print("[INVENTORY] Added 1 of non-stackable " .. itemId .. " to new slot " .. i)
+                end
+                if remainingQuantity == 0 then
+                    return true
+                end
+            end
+        end
+    end
+
+    if remainingQuantity > 0 then
+        print("[INVENTORY] Inventory full. Could not add " .. remainingQuantity .. " of " .. itemId)
+        uiMessage = "Inventory full!"
+        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+        return false
+    end
+    return true
+end
+
+function removeItemFromInventory(slotIndex, quantityToRemove)
+    if not slotIndex or slotIndex < 1 or slotIndex > player.inventoryCapacity then
+        print("[INVENTORY ERROR] Invalid slotIndex for removeItemFromInventory: " .. tostring(slotIndex))
+        return false
+    end
+
+    local slot = player.inventory[slotIndex]
+    if not slot then
+        print("[INVENTORY ERROR] No item found in slot " .. slotIndex .. " to remove.")
+        return false
+    end
+
+    local itemData = GameData.story.items[slot.itemId]
+    if not itemData then
+        print("[INVENTORY ERROR] Item data not found for item in slot " .. slotIndex .. " (itemId: " .. slot.itemId .. ")")
+        player.inventory[slotIndex] = nil
+        return false
+    end
+
+    if not itemData.stackable or quantityToRemove >= slot.quantity then
+        print("[INVENTORY] Removing item " .. slot.itemId .. " from slot " .. slotIndex)
+        player.inventory[slotIndex] = nil
+    else
+        slot.quantity = slot.quantity - quantityToRemove
+        print("[INVENTORY] Removed " .. quantityToRemove .. " of " .. slot.itemId .. " from slot " .. slotIndex .. ". Remaining: " .. slot.quantity)
+    end
+    return true
+end
+
+function useItem(slotIndex)
+    if not slotIndex or slotIndex < 1 or slotIndex > player.inventoryCapacity then
+        print("[INVENTORY ERROR] Invalid slotIndex for useItem: " .. tostring(slotIndex))
+        return
+    end
+
+    local itemInSlot = player.inventory[slotIndex]
+    if not itemInSlot then
+        print("[INVENTORY ERROR] No item in slot " .. slotIndex .. " to use.")
+        uiMessage = "Empty slot selected."
+        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+        return
+    end
+
+    local itemData = GameData.story.items[itemInSlot.itemId]
+    if not itemData then
+        print("[INVENTORY ERROR] Item data not found for " .. itemInSlot.itemId .. " in slot " .. slotIndex)
+        uiMessage = "Error: Unknown item data."
+        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+        return
+    end
+
+    print("[INVENTORY] Attempting to use item " .. itemInSlot.itemId .. " from slot " .. slotIndex)
+
+    if itemData.type == "consumable" then
+        local itemUsedSuccessfully = false
+        if itemData.effects then
+            for _, effect in ipairs(itemData.effects) do
+                if effect.type == "heal" then
+                    if player.hp < player.maxHp then
+                        local healAmount = effect.amount or 0
+                        player.hp = math.min(player.maxHp, player.hp + healAmount)
+                        local itemNameText = GameData.getText(currentGameLanguage, itemData.name_key)
+
+                        uiMessage = string.format("%s used! Healed %d HP.", itemNameText, healAmount)
+                        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+
+                        print(string.format("[INVENTORY] Player used %s. Healed %d HP. Current HP: %d/%d", itemInSlot.itemId, healAmount, player.hp, player.maxHp))
+
+                        if resources.sounds.heal and not audioState.isMutedSFX then
+                            resources.sounds.heal:play()
+                        end
+                        local healPS = resources.particleSystems.heal()
+                        if healPS then
+                            healPS:emit(100)
+                            table.insert(battleState.effects, {
+                                type = "heal",
+                                x = animations.player.x,
+                                y = animations.player.y,
+                                particleSystem = healPS,
+                                timer = GAME_CONSTANTS.TIMER.EFFECT_DURATION
+                            })
+                        end
+                        table.insert(battleState.effects, {
+                            type = "damage",
+                            amount = "+" .. tostring(healAmount),
+                            x = animations.player.x,
+                            y = animations.player.y - 50,
+                            timer = 1,
+                            color = {0, 1, 0}
+                        })
+                        itemUsedSuccessfully = true
+                    else
+                        uiMessage = "HP is already full."
+                        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+                        print("[INVENTORY] Player HP is full. Cannot use " .. itemInSlot.itemId)
+                        return
+                    end
+                end
+            end
+        else
+            print("[INVENTORY] Consumable item " .. itemInSlot.itemId .. " has no defined effects.")
+            uiMessage = GameData.getText(currentGameLanguage, itemData.name_key) .. " has no effect."
+            uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+        end
+
+        if itemUsedSuccessfully then
+            removeItemFromInventory(slotIndex, 1)
+        end
+    else
+        print("[INVENTORY] Item " .. itemInSlot.itemId .. " is not a consumable.")
+        uiMessage = GameData.getText(currentGameLanguage, itemData.name_key) .. " cannot be used right now."
+        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+    end
+end
+-- End Inventory Management Functions
 
 function performPlayerAttack()
     if skillSystem.attack.cooldown > 0 then
@@ -2619,14 +2926,12 @@ function performPlayerAttack()
     enemy.hp = validateNumber(enemy.hp - damage, 0, enemy.maxHp, 0)
     local currentEnemyData = enemyData[menuState.levelSelect.currentLevel]
     local enemyImage = resources.images[currentEnemyData.image] or resources.images.enemyDemonKing
-    -- Corrected drawing for enemy image
     local enemyDrawScale = math.min(positions.enemy.maxWidth / enemyImage:getWidth(), positions.enemy.maxHeight / enemyImage:getHeight())
     if enemyImage:getHeight() * enemyDrawScale < positions.enemy.minHeight then
         enemyDrawScale = positions.enemy.minHeight / enemyImage:getHeight()
     end
     local effectX = animations.enemy.x
     local effectY = animations.enemy.y
-    -- The particle system should be offset based on the image size to hit the center
     local hitPS = resources.particleSystems.hit()
     hitPS:emit(100)
     table.insert(battleState.effects, {
@@ -2659,9 +2964,7 @@ function performPlayerAttack()
     battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
     battleState.phase = "action"
     if enemy.hp <= 0 then
-        -- EXP Granting moved to love.update for consistency, before victory state transition
         battleState.phase = "result"
-        -- Timer is handled in love.update
     else
         TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY, startEnemyTurn, TIMER_GROUPS.BATTLE)
     end
@@ -2670,14 +2973,14 @@ end
 function performPlayerHeal()
   print("[BATTLE ACTION] Player action: Heal")
   local skill = skillSystem.heal
-  local skillData = skillInfo[4] -- Assuming Heal is the 4th skill in skillInfo table
+  local skillData = skillInfo[4]
   if skill.cooldown > 0 then
     battleState.message = GameData.getText(currentGameLanguage, "battle_msg_skill_cooldown")
     battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
     print("[BATTLE] Heal skill on cooldown")
     return
   end
-  if player.mp < skillData.mpCost then -- NEW MP CHECK
+  if player.mp < skillData.mpCost then
       battleState.message = GameData.getText(currentGameLanguage, "battle_msg_not_enough_mp")
       battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
       print("[BATTLE] Not enough MP for Heal skill")
@@ -2687,11 +2990,10 @@ function performPlayerHeal()
         resources.sounds.heal:play()
         print("[AUDIO] Played sound: heal")
     end
-    player.mp = math.max(0, player.mp - skillData.mpCost) -- NEW MP DEDUCTION
+    player.mp = math.max(0, player.mp - skillData.mpCost)
     local healAmount = calculateHeal(player)
     player.hp = validateNumber(player.hp + healAmount, 0, player.maxHp, player.hp)
     local playerImage = resources.images.playerStand
-    -- Corrected drawing for player image
     local playerDrawScale = math.min(positions.player.maxWidth / playerImage:getWidth(), positions.player.maxHeight / playerImage:getHeight())
     if playerImage:getHeight() * playerDrawScale < positions.player.minHeight then
         playerDrawScale = positions.player.minHeight / playerImage:getHeight()
@@ -2768,14 +3070,14 @@ end
 function performPlayerSpecial_original()
   print("[BATTLE ACTION] Player action: Special")
   local skill = skillSystem.special
-  local skillData = skillInfo[3] -- Assuming Special is the 3rd skill in skillInfo table
+  local skillData = skillInfo[3]
   if skill.cooldown > 0 then
     battleState.message = GameData.getText(currentGameLanguage, "battle_msg_skill_cooldown")
     battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
     print("[BATTLE] Special skill on cooldown")
     return
   end
-  if player.mp < skillData.mpCost then -- NEW MP CHECK
+  if player.mp < skillData.mpCost then
       battleState.message = GameData.getText(currentGameLanguage, "battle_msg_not_enough_mp")
       battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
       print("[BATTLE] Not enough MP for Special skill")
@@ -2785,7 +3087,7 @@ function performPlayerSpecial_original()
     resources.sounds.special:play()
     print("[AUDIO] Played sound: special")
   end
-player.mp = math.max(0, player.mp - skillData.mpCost) -- NEW MP DEDUCTION
+player.mp = math.max(0, player.mp - skillData.mpCost)
 animations.player.current = "attack"
 local damage, isCrit = calculateDamage(player, enemy)
 print("[BATTLE] Player stats before special: HP=" .. player.hp .. ", MP=" .. player.mp .. ", Attack=" .. player.attack .. ", Defense=" .. player.defense .. ", CritRate=" .. player.critRate .. ", CritDamage=" .. player.critDamage)
@@ -2794,7 +3096,6 @@ enemy.hp = validateNumber(enemy.hp - damage, 0, enemy.maxHp, 0)
 print("[BATTLE] Player dealt " .. damage .. " damage to enemy with Special attack")
 local currentEnemyData = enemyData[menuState.levelSelect.currentLevel]
 local enemyImage = resources.images[currentEnemyData.image] or resources.images.enemyDemonKing
--- Corrected drawing for enemy image
 local enemyDrawScale = math.min(positions.enemy.maxWidth / enemyImage:getWidth(), positions.enemy.maxHeight / enemyImage:getHeight())
 if enemyImage:getHeight() * enemyDrawScale < positions.enemy.minHeight then
     enemyDrawScale = positions.enemy.minHeight / enemyImage:getHeight()
@@ -2832,10 +3133,8 @@ battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
 battleState.phase = "action"
 print("[BATTLE STATE] Battle phase changed to 'action'")
 if enemy.hp <= 0 then
-  -- EXP Granting moved to love.update for consistency, before victory state transition
   battleState.phase = "result"
   print("[BATTLE STATE] Battle phase changed to 'result', enemy defeated by special attack")
-  -- Timer is handled in love.update
 else
   addTimer(GAME_CONSTANTS.TIMER.ACTION_DELAY, function() startEnemyTurn() end, TIMER_GROUPS.BATTLE)
   print("[TIMER] Added timer for enemy turn")
@@ -2875,7 +3174,6 @@ function startEnemyTurn()
         end
       end
       local playerImage = resources.images.playerStand
-      -- Corrected drawing for player image
       local playerDrawScale = math.min(positions.player.maxWidth / playerImage:getWidth(), positions.player.maxHeight / playerImage:getHeight())
       if playerImage:getHeight() * playerDrawScale < positions.player.minHeight then
           playerDrawScale = positions.player.minHeight / playerImage:getHeight()
@@ -2915,7 +3213,6 @@ function startEnemyTurn()
       enemy.isDefending = true
       battleState.message = GameData.getText(currentGameLanguage, "battle_msg_enemy_defend")
       local enemyImage = resources.images[enemyDataForLevel.image] or resources.images.enemyDemonKing
-      -- Corrected drawing for enemy image
       local enemyDrawScale = math.min(positions.enemy.maxWidth / enemyImage:getWidth(), positions.enemy.maxHeight / enemyImage:getHeight())
       if enemyImage:getHeight() * enemyDrawScale < positions.enemy.minHeight then
           enemyDrawScale = positions.enemy.minHeight / enemyImage:getHeight()
@@ -2934,7 +3231,6 @@ function startEnemyTurn()
     end
     battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
     if player.hp <= 0 then
-      -- Defeat is handled in love.update
     else
       addTimer(GAME_CONSTANTS.TIMER.ACTION_DELAY, function()
         if gameState == "battle" then
@@ -3303,18 +3599,15 @@ function drawOptionsUI()
   love.graphics.print("<", backButtonRect.x + 15, backButtonRect.y + 15)
 end
 
--- NEW: Basic table serializer for saving
 function table_to_string(tbl)
     local s = "{\n"
     local first = true
     for k, v in pairs(tbl) do
-        -- Skip any function values
         if type(v) == "function" then
             print("Warning: Skipping function value for key: " .. tostring(k))
             goto continue
         end
-        -- Skip `_pointer` keys that might be from love objects, or any internal refs
-        if type(k) == "string" and k:sub(1,1) == "_" then -- Example: _pointer for love.graphics.Image
+        if type(k) == "string" and k:sub(1,1) == "_" then
             print("Warning: Skipping internal/private key: " .. k)
             goto continue
         end
@@ -3324,19 +3617,16 @@ function table_to_string(tbl)
         end
         first = false
 
-        -- Handle key formatting
         if type(k) == "number" then
             s = s .. "  [" .. k .. "] = "
         elseif type(k) == "string" then
-            s = s .. "  " .. string.format("%q", k) .. " = " -- Quote string keys for safety
+            s = s .. "  " .. string.format("%q", k) .. " = "
         else
-            -- Skip unsupported key types (e.g., boolean keys, userdata)
             print("Warning: Skipping unsupported key type: " .. type(k))
-            first = true -- prevent adding comma if we skip this entry
+            first = true
             goto continue
         end
 
-        -- Handle value formatting
         if type(v) == "number" then
             s = s .. tostring(v)
         elseif type(v) == "string" then
@@ -3346,9 +3636,8 @@ function table_to_string(tbl)
         elseif type(v) == "table" then
             s = s .. table_to_string(v)
         else
-            -- Skip unsupported value types
             print("Warning: Skipping unsupported value type " .. type(v) .. " for key " .. tostring(k))
-            first = true -- prevent adding comma if we skip this entry
+            first = true
         end
         ::continue::
     end
@@ -3356,7 +3645,6 @@ function table_to_string(tbl)
     return s
 end
 
--- NEW: Save Game Function
 function saveGame()
     local saveData = {
         player = {
@@ -3371,15 +3659,12 @@ function saveGame()
             defense = player.defense,
             critRate = player.critRate,
             critDamage = player.critDamage,
-            -- Do NOT save image, x, y, speed, isDefending, status, combo as they are runtime states or loaded resources
+            inventory = player.inventory,
+            inventoryCapacity = player.inventoryCapacity,
         },
-        -- currentState for story progression
         currentState = {
             currentLevel = currentState.currentLevel,
             dialogueIndex = currentState.dialogueIndex,
-            -- If character relationships or other GameData internal states need to be saved,
-            -- they would need to be extracted here. For now, GameData states are assumed persistent
-            -- or reset by game logic as needed.
         },
         playerSettings = {
             isCheatMode = playerSettings.isCheatMode,
@@ -3393,7 +3678,6 @@ function saveGame()
         currentResolutionIndex = currentResolutionIndex,
         currentFontSizeIndex = GAME_CONSTANTS.currentFontSizeIndex,
         currentGameLanguage = currentGameLanguage,
-        -- skillSystem cooldowns
         skillCooldowns = {
             attack = skillSystem.attack.cooldown,
             defend = skillSystem.defend.cooldown,
@@ -3415,7 +3699,6 @@ function saveGame()
     end
 end
 
--- NEW: Load Game Function
 function loadGame()
     local saveFile = "savegame.sav"
     if not love.filesystem.isFile(saveFile) then
@@ -3433,7 +3716,6 @@ function loadGame()
         return false
     end
 
-    -- Use load to parse the Lua table string
     local loadedChunk, err = load("return " .. content, "savegame.sav")
     if not loadedChunk then
         print("[LOAD GAME] Failed to parse save data: " .. tostring(err))
@@ -3441,9 +3723,8 @@ function loadGame()
         battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
         return false
     end
-    local data = loadedChunk() -- Execute the loaded chunk to get the table
+    local data = loadedChunk()
 
-    -- Apply loaded data to global variables
     if data.player then
         player.hp = data.player.hp or player.hp
         player.maxHp = data.player.maxHp or player.maxHp
@@ -3456,7 +3737,18 @@ function loadGame()
         player.defense = data.player.defense or player.defense
         player.critRate = data.player.critRate or player.critRate
         player.critDamage = data.player.critDamage or player.critDamage
-        -- Re-initialize other player properties as they are runtime/resource related
+
+        player.inventoryCapacity = data.player.inventoryCapacity or 20
+        local loadedInventory = data.player.inventory or {}
+        player.inventory = {}
+        for i = 1, player.inventoryCapacity do
+            if loadedInventory[i] then
+                player.inventory[i] = loadedInventory[i]
+            else
+                player.inventory[i] = nil
+            end
+        end
+
         player.image = resources.images.playerStand
         player.isDefending = false
         player.status = {}
@@ -3466,7 +3758,6 @@ function loadGame()
     if data.currentState then
         currentState.currentLevel = data.currentState.currentLevel or 1
         currentState.dialogueIndex = data.currentState.dialogueIndex or 1
-        -- Call GameData to load story state, which also loads relationships
         GameData.loadStoryState(currentState.currentLevel, currentState.dialogueIndex)
         print("[LOAD GAME] Story state loaded to level " .. currentState.currentLevel .. ", dialogue index " .. currentState.dialogueIndex)
     end
@@ -3486,12 +3777,10 @@ function loadGame()
     GAME_CONSTANTS.currentFontSizeIndex = data.currentFontSizeIndex or 2
     currentGameLanguage = data.currentGameLanguage or "en"
 
-    -- Apply settings changes that require re-initialization
     setCurrentLanguage(currentGameLanguage)
     applyFontSizeChange()
     applyResolutionChange()
     
-    -- Apply skill cooldowns
     if data.skillCooldowns then
         skillSystem.attack.cooldown = data.skillCooldowns.attack or 0
         skillSystem.defend.cooldown = data.skillCooldowns.defend or 0
@@ -3499,9 +3788,7 @@ function loadGame()
         skillSystem.heal.cooldown = data.skillCooldowns.heal or 0
     end
 
-    -- After loading, transition to menu and reset relevant battle state
     transitionGameState(nil, "menu")
-    -- Reset battleState messages etc. to avoid lingering messages from before load
     battleState.message = ""
     battleState.messageTimer = 0
 

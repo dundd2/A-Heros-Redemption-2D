@@ -94,6 +94,8 @@ M.story = {
           player_stats_crit_damage = "CRD", -- NEW
           game_saved_success = "Game saved successfully!", -- NEW
           game_saved_fail = "Failed to save game!", -- NEW
+          item_potion_health_1_name = "Health Potion",
+          item_potion_health_1_desc = "A simple potion that restores a small amount of health.",
           game_load_no_file = "No save file found.", -- NEW
           game_load_fail = "Failed to load game!", -- NEW
           game_load_corrupt = "Save data corrupted!", -- NEW
@@ -253,6 +255,8 @@ as the one who brought about "A Hero's Redemption."
           player_stats_crit_damage = "暴擊傷害", -- NEW
           game_saved_success = "遊戲儲存成功！", -- NEW
           game_saved_fail = "儲存遊戲失敗！", -- NEW
+          item_potion_health_1_name = "健康药水",
+          item_potion_health_1_desc = "一种简单的药水，可以恢复少量生命值。",
           game_load_no_file = "找不到存檔檔案。", -- NEW
           game_load_fail = "載入遊戲失敗！", -- NEW
           game_load_corrupt = "存檔資料損壞！", -- NEW
@@ -544,6 +548,20 @@ as the one who brought about "A Hero's Redemption."
       makeChoice = function(self, options, callback)
           self.current = {options = options, callback = callback}
       end
+  },
+  items = {
+    potion_health_1 = {
+      name_key = "item_potion_health_1_name",
+      description_key = "item_potion_health_1_desc",
+      icon_key = "icon_potion_red", -- Placeholder icon key
+      type = "consumable",
+      stackable = true,
+      maxStack = 10,
+      effects = {
+        {type = "heal", amount = 20}
+      },
+      price = 10 -- Example price
+    }
   }
 }
 
