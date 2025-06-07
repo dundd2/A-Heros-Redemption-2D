@@ -1730,7 +1730,8 @@ function M.drawCharacters(animations, resources, positions, enemy)
   end
 
   local enemyDrawX = positions.enemy.x - (enemyImage:getWidth() * enemyScale) / 2
-  local enemyDrawY = positions.y - (enemyImage:getHeight() * enemyScale) / 2
+  -- FIX: Changed positions.y to positions.enemy.y
+  local enemyDrawY = positions.enemy.y - (enemyImage:getHeight() * enemyScale) / 2
   love.graphics.draw(enemyImage, enemyDrawX, enemyDrawY, 0, enemyScale, enemyScale)
 end
 
@@ -1822,5 +1823,4 @@ function M.drawHowToPlayPageUI(resources, howToPlayState, gameData, currentLangu
     love.graphics.printf(backButtonText, buttonX, buttonY + (buttonHeight - uiFont:getHeight()) / 2, buttonWidth, "center")
     love.graphics.setColor(1,1,1) -- Reset color just in case
 end
-
 return M
