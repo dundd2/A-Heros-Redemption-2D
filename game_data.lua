@@ -113,6 +113,10 @@ M.story = {
           item_leather_cap_desc = "A simple cap made of treated leather.",
           item_old_shirt_name = "Old Shirt",
           item_old_shirt_desc = "A worn-out shirt. Offers minimal protection.",
+          item_iron_sword_name = "Iron Sword",
+          item_iron_sword_desc = "A sturdy sword crafted from iron. Offers a decent balance of offense.",
+          item_steel_axe_name = "Steel Axe",
+          item_steel_axe_desc = "A heavy axe made of steel. Slower, but hits hard.",
           error_not_equippable = "%{item} cannot be equipped.",
           item_equipped = "%{item} equipped to %{slot}.",
           item_unequipped = "%{item} unequipped from %{slot}.",
@@ -338,6 +342,10 @@ as the one who brought about "A Hero's Redemption."
           item_leather_cap_desc = "一顶由处理过的皮革制成的简单帽子。",
           item_old_shirt_name = "旧衬衫",
           item_old_shirt_desc = "一件破旧的衬衫，提供极少的保护。",
+          item_iron_sword_name = "铁剑",
+          item_iron_sword_desc = "一把由铁铸造的坚固剑。攻守兼备。",
+          item_steel_axe_name = "钢斧",
+          item_steel_axe_desc = "一把沉重的钢制斧头。攻速较慢，但威力强大。",
           error_not_equippable = "%{item}无法装备。",
           item_equipped = "已将%{item}装备到%{slot}。",
           item_unequipped = "已从%{slot}卸下%{item}。",
@@ -753,6 +761,26 @@ as the one who brought about "A Hero's Redemption."
         slot = "chest",
         stats = { defense = 1, maxHp = 5 }, -- Example of affecting maxHp
         price = 10
+    },
+    iron_sword = {
+        name_key = "item_iron_sword_name",
+        description_key = "item_iron_sword_desc",
+        icon_key = "icon_sword_basic", -- Using placeholder "icon_sword_basic"
+        type = "equipment",
+        slot = "weapon",
+        stats = { attack = 5, critRate = 2 },
+        model_key_player = "player-attack", -- Using placeholder "player-attack"
+        price = 50
+    },
+    steel_axe = {
+        name_key = "item_steel_axe_name",
+        description_key = "item_steel_axe_desc",
+        icon_key = "icon_sword_basic", -- Using placeholder "icon_sword_basic"
+        type = "equipment",
+        slot = "weapon",
+        stats = { attack = 7, critRate = 1 },
+        model_key_player = "player-attack", -- Using placeholder "player-attack"
+        price = 80
     }
   }
 }

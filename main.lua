@@ -387,7 +387,7 @@ function love.draw()
     GameHelpers.drawStoryDialogue(resources, GameData, currentGameLanguage, GameLogic.enemyData, GameData.story.currentState)
   elseif gameState == "battle" then
     GameLogic.drawBattleScene(resources, GameData.story.currentState, GameLogic.battleBackgrounds)
-    GameLogic.drawCharacters(animations, resources, GameLogic.positions, enemy)
+    GameHelpers.drawCharacters(animations, resources, GameLogic.positions, enemy)
     GameHelpers.drawBattleUI(resources, player, enemy, battleState, uiState, GameData, currentGameLanguage, GAME_CONSTANTS, GameLogic.skillInfo, GameLogic.skillSystem)
     GameLogic.drawEffects(battleState)
     GameHelpers.drawBattleMessage(battleState, player, enemy, GameData, currentGameLanguage)
@@ -396,7 +396,7 @@ function love.draw()
     end
   elseif gameState == "pause" then
     GameLogic.drawBattleScene(resources, GameData.story.currentState, GameLogic.battleBackgrounds)
-    GameLogic.drawCharacters(animations, resources, GameLogic.positions, enemy)
+    GameHelpers.drawCharacters(animations, resources, GameLogic.positions, enemy)
     GameHelpers.drawBattleUI(resources, player, enemy, battleState, uiState, GameData, currentGameLanguage, GAME_CONSTANTS, GameLogic.skillInfo, GameLogic.skillSystem)
     GameHelpers.drawPauseUI(pauseState, GameData, currentGameLanguage, resources)
   elseif gameState == "victory" then
