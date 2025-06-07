@@ -6,7 +6,7 @@ local GameLogic
 local GameData 
 
 local player, enemy, resources, animations, battleState, uiState, pauseState,
-      resultState, menuState, optionsState, storyPageState, aboutPageState,
+      resultState, menuState, optionsState, storyPageState, aboutPageState, howToPlayState,
       inventoryState, questLogState, statsScreenState,
       GAME_CONSTANTS, playerSettings, audioState,
       screenWidth, screenHeight, availableResolutions, currentResolutionIndex,
@@ -17,7 +17,7 @@ local M = {}
 
 function M.setGlobals(
     p, e, r, a, bs, us, ps,
-    rs, ms, os, sps, aps,
+    rs, ms, os, sps, aps, htps,
     is, qls, sss,
     gc, ps_settings, as_audio,
     sw, sh, ar, cri,
@@ -36,6 +36,7 @@ function M.setGlobals(
     optionsState = os
     storyPageState = sps
     aboutPageState = aps
+    howToPlayState = htps
     inventoryState = is
     questLogState = qls
     statsScreenState = sss
