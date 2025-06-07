@@ -399,7 +399,7 @@ function M.drawMainMenu(resources, menuState, GameData, currentGameLanguage, GAM
   local fontUI = resources.fonts.ui
   love.graphics.setFont(fontUI)
   love.graphics.setColor(1,1,1)
-  local versionInfo = "V0.02\nBy Dundd2\nBuild with love-12.0-win64 Beta"
+  local versionInfo = "V0.02\nBy Dundd2\nBuild with love-12.0-win64 Beta (Bestest Friend)"
   local textWidth = fontUI:getWidth(versionInfo)
   local textHeight = fontUI:getHeight()
   love.graphics.print(versionInfo, love.graphics.getWidth() - textWidth - 100, love.graphics.getHeight() - textHeight - 100)
