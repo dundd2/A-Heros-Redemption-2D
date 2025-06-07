@@ -227,6 +227,7 @@ local VALID_GAME_STATES = {
     aboutPage = true,
     inventoryScreen = true,
     questLogScreen = true, -- New state
+    statsScreen = true, -- New state
 }
 local VALID_BATTLE_PHASES = {
     select = true,
@@ -285,7 +286,7 @@ function transitionGameState(from, to)
             end
         end
 
-        if validatedTo == "menu" or validatedTo == "options" or validatedTo == "levelSelect" or validatedTo == "storyPage" or validatedTo == "aboutPage" or validatedTo == "inventoryScreen" or validatedTo == "questLogScreen" then
+        if validatedTo == "menu" or validatedTo == "options" or validatedTo == "levelSelect" or validatedTo == "storyPage" or validatedTo == "aboutPage" or validatedTo == "inventoryScreen" or validatedTo == "questLogScreen" or validatedTo == "statsScreen" then
             if resources.sounds.menuBgm then
                 resources.sounds.menuBgm:setLooping(true)
                 resources.sounds.menuBgm:play()
@@ -751,6 +752,13 @@ questLogState = {
     navDelay = 0.15        -- Delay between inputs
 }
 
+statsScreenState = {
+    padding = 20,
+    lineHeight = 0, -- Will be set based on font
+    labelColumnWidth = 0, -- For alignment
+    valueColumnX = 0 -- For alignment
+}
+
 enemy = {
   x = 600,
   y = 300,
@@ -889,6 +897,8 @@ print("[GAME] Battle state initialized")
       {textKey = "menu_about", action = function() transitionGameState(gameState, "aboutPage") end, descriptionKey = "menu_about_desc"},
       -- New Quest Log option:
       {textKey = "menu_quest_log", action = function() transitionGameState(gameState, "questLogScreen") end, descriptionKey = "menu_quest_log_desc"},
+      -- New Statistics option:
+      {textKey = "menu_statistics", action = function() transitionGameState(gameState, "statsScreen") end, descriptionKey = "menu_statistics_desc"},
       {textKey = "menu_save_game", action = function() saveGame() end, descriptionKey = "menu_save_game_desc"},
       {textKey = "menu_load_game", action = function() loadGame() end, descriptionKey = "menu_load_game_desc"},
       {textKey = "menu_exit", action = function() love.event.quit() end, descriptionKey = "menu_exit_desc"}
@@ -1152,6 +1162,8 @@ function love.update(dt)
         -- uiMessageTimer is handled globally now
     elseif gameState == "questLogScreen" then
         handleQuestLogInput(dt)
+    elseif gameState == "statsScreen" then
+        handleStatsScreenInput(dt)
     end
 end
 
@@ -1457,6 +1469,82 @@ function handleQuestLogInput(dt)
     end
 end
 
+function drawStatsScreen()
+    local windowWidth = love.graphics.getWidth()
+    local windowHeight = love.graphics.getHeight()
+    love.graphics.clear(0.15, 0.15, 0.1, 1) -- Dark green-ish background
+
+    local uiFont = resources.fonts.ui or love.graphics.newFont(18) -- Ensure a decent size
+    local titleFont = resources.fonts.battle or love.graphics.newFont(28)
+
+    statsScreenState.lineHeight = uiFont:getHeight() + 8 -- Add some padding
+    local currentY = statsScreenState.padding
+
+    -- Title
+    love.graphics.setFont(titleFont)
+    love.graphics.setColor(1, 1, 1)
+    local titleText = GameData.getText(currentGameLanguage, "stats_screen_title", nil, "Player Statistics")
+    love.graphics.printf(titleText, 0, currentY, windowWidth, "center")
+    currentY = currentY + titleFont:getHeight() + statsScreenState.padding * 2
+
+    -- Stats Display
+    love.graphics.setFont(uiFont)
+
+    local statsToDisplay = {
+        {label_key = "stat_label_level", value = player.level},
+        {label_key = "stat_label_exp", value_format = "%s / %s", value = player.exp, value2 = player.expToNextLevel},
+        {label_key = "stat_label_hp", value_format = "%s / %s", value = player.hp, value2 = player.maxHp},
+        {label_key = "stat_label_mp", value_format = "%s / %s", value = player.mp, value2 = player.maxMp},
+        {label_key = "stat_label_attack", value = player.attack},
+        {label_key = "stat_label_defense", value = player.defense},
+        {label_key = "stat_label_crit_rate", value_format = "%s%%", value = player.critRate},
+        {label_key = "stat_label_crit_damage", value_format = "%sx", value = player.critDamage}
+    }
+
+    -- Determine max label width for alignment (simple version)
+    local maxLabelWidth = 0
+    for _, statItem in ipairs(statsToDisplay) do
+        local labelText = GameData.getText(currentGameLanguage, statItem.label_key, nil, statItem.label_key) .. ":"
+        if uiFont:getWidth(labelText) > maxLabelWidth then
+            maxLabelWidth = uiFont:getWidth(labelText)
+        end
+    end
+    statsScreenState.labelColumnWidth = maxLabelWidth + statsScreenState.padding
+    statsScreenState.valueColumnX = statsScreenState.padding + statsScreenState.labelColumnWidth
+
+    -- Draw each statistic
+    for _, statItem in ipairs(statsToDisplay) do
+        love.graphics.setColor(0.8, 0.8, 1) -- Label color
+        local labelText = GameData.getText(currentGameLanguage, statItem.label_key, nil, statItem.label_key) .. ":"
+        love.graphics.print(labelText, statsScreenState.padding + (statsScreenState.labelColumnWidth - uiFont:getWidth(labelText) - statsScreenState.padding), currentY) -- Right align labels
+
+        love.graphics.setColor(1, 1, 1) -- Value color
+        local valueString
+        if statItem.value_format then
+            if statItem.value2 then
+                valueString = string.format(statItem.value_format, tostring(statItem.value), tostring(statItem.value2))
+            else
+                valueString = string.format(statItem.value_format, tostring(statItem.value))
+            end
+        else
+            valueString = tostring(statItem.value)
+        end
+        love.graphics.print(valueString, statsScreenState.valueColumnX, currentY)
+
+        currentY = currentY + statsScreenState.lineHeight
+    end
+
+    -- Instructions
+    love.graphics.setColor(0.8, 0.8, 0.8)
+    local instructions = GameData.getText(currentGameLanguage, "stats_screen_instructions", nil, "Press ESC to go back")
+    love.graphics.printf(instructions, 0, windowHeight - statsScreenState.lineHeight - statsScreenState.padding, windowWidth, "center")
+end
+
+function handleStatsScreenInput(dt)
+    -- Placeholder: Will be implemented if complex input is needed later
+    -- For now, Esc is handled in love.keypressed
+end
+
 function love.draw()
   if loadingState then
     drawLoadingScreen()
@@ -1499,6 +1587,8 @@ function love.draw()
     drawInventoryScreen()
   elseif gameState == "questLogScreen" then
     drawQuestLogScreen()
+  elseif gameState == "statsScreen" then
+    drawStatsScreen()
   end
   love.graphics.pop()
 end
@@ -2627,7 +2717,23 @@ function love.keypressed(key)
         inventoryState.selectedSlot = inventoryState.selectedSlot - inventoryState.slotCols
     elseif gameState == "questLogScreen" then
         if key == "escape" then
-            transitionGameState(gameState, "menu") -- Or previousGameState if implemented
+            -- Use previousGameState if available, similar to questLog and inventory
+            if previousGameState then
+                transitionGameState(gameState, previousGameState)
+                previousGameState = nil
+            else
+                transitionGameState(gameState, "menu") -- Fallback to menu
+            end
+        end
+    elseif gameState == "statsScreen" then
+        if key == "escape" then
+            -- Use previousGameState if available, similar to questLog and inventory
+            if previousGameState then
+                transitionGameState(gameState, previousGameState)
+                previousGameState = nil
+            else
+                transitionGameState(gameState, "menu") -- Fallback to menu
+            end
         end
     elseif key == "down" then
         inventoryState.selectedSlot = inventoryState.selectedSlot + inventoryState.slotCols
@@ -2674,6 +2780,20 @@ function love.keypressed(key)
     elseif gameState == "menu" or gameState == "battle" or gameState == "options" or gameState == "levelSelect" or gameState == "storyPage" or gameState == "aboutPage" or gameState == "inventoryScreen" then -- Ensure inventoryScreen is also a valid state to open questlog from
         previousGameState = gameState -- Store current state
         transitionGameState(gameState, "questLogScreen")
+    end
+  end
+
+  if key == "c" then
+    if gameState == "statsScreen" then
+        if previousGameState then
+            transitionGameState(gameState, previousGameState)
+            previousGameState = nil
+        else
+            transitionGameState(gameState, "menu")
+        end
+    elseif gameState == "menu" or gameState == "battle" or gameState == "options" or gameState == "levelSelect" or gameState == "storyPage" or gameState == "aboutPage" or gameState == "inventoryScreen" or gameState == "questLogScreen" then -- States from which it can be opened
+        previousGameState = gameState
+        transitionGameState(gameState, "statsScreen")
     end
   end
 
@@ -4063,6 +4183,82 @@ function saveGame()
         battleState.message = GameData.getText(currentGameLanguage, "game_saved_fail")
         battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
     end
+end
+
+function drawStatsScreen()
+    local windowWidth = love.graphics.getWidth()
+    local windowHeight = love.graphics.getHeight()
+    love.graphics.clear(0.15, 0.15, 0.1, 1) -- Dark green-ish background
+
+    local uiFont = resources.fonts.ui or love.graphics.newFont(18) -- Ensure a decent size
+    local titleFont = resources.fonts.battle or love.graphics.newFont(28)
+
+    statsScreenState.lineHeight = uiFont:getHeight() + 8 -- Add some padding
+    local currentY = statsScreenState.padding
+
+    -- Title
+    love.graphics.setFont(titleFont)
+    love.graphics.setColor(1, 1, 1)
+    local titleText = GameData.getText(currentGameLanguage, "stats_screen_title", nil, "Player Statistics")
+    love.graphics.printf(titleText, 0, currentY, windowWidth, "center")
+    currentY = currentY + titleFont:getHeight() + statsScreenState.padding * 2
+
+    -- Stats Display
+    love.graphics.setFont(uiFont)
+
+    local statsToDisplay = {
+        {label_key = "stat_label_level", value = player.level},
+        {label_key = "stat_label_exp", value_format = "%s / %s", value = player.exp, value2 = player.expToNextLevel},
+        {label_key = "stat_label_hp", value_format = "%s / %s", value = player.hp, value2 = player.maxHp},
+        {label_key = "stat_label_mp", value_format = "%s / %s", value = player.mp, value2 = player.maxMp},
+        {label_key = "stat_label_attack", value = player.attack},
+        {label_key = "stat_label_defense", value = player.defense},
+        {label_key = "stat_label_crit_rate", value_format = "%s%%", value = player.critRate},
+        {label_key = "stat_label_crit_damage", value_format = "%sx", value = player.critDamage}
+    }
+
+    -- Determine max label width for alignment (simple version)
+    local maxLabelWidth = 0
+    for _, statItem in ipairs(statsToDisplay) do
+        local labelText = GameData.getText(currentGameLanguage, statItem.label_key, nil, statItem.label_key) .. ":"
+        if uiFont:getWidth(labelText) > maxLabelWidth then
+            maxLabelWidth = uiFont:getWidth(labelText)
+        end
+    end
+    statsScreenState.labelColumnWidth = maxLabelWidth + statsScreenState.padding
+    statsScreenState.valueColumnX = statsScreenState.padding + statsScreenState.labelColumnWidth
+
+    -- Draw each statistic
+    for _, statItem in ipairs(statsToDisplay) do
+        love.graphics.setColor(0.8, 0.8, 1) -- Label color
+        local labelText = GameData.getText(currentGameLanguage, statItem.label_key, nil, statItem.label_key) .. ":"
+        love.graphics.print(labelText, statsScreenState.padding + (statsScreenState.labelColumnWidth - uiFont:getWidth(labelText) - statsScreenState.padding), currentY) -- Right align labels
+
+        love.graphics.setColor(1, 1, 1) -- Value color
+        local valueString
+        if statItem.value_format then
+            if statItem.value2 then
+                valueString = string.format(statItem.value_format, tostring(statItem.value), tostring(statItem.value2))
+            else
+                valueString = string.format(statItem.value_format, tostring(statItem.value))
+            end
+        else
+            valueString = tostring(statItem.value)
+        end
+        love.graphics.print(valueString, statsScreenState.valueColumnX, currentY)
+
+        currentY = currentY + statsScreenState.lineHeight
+    end
+
+    -- Instructions
+    love.graphics.setColor(0.8, 0.8, 0.8)
+    local instructions = GameData.getText(currentGameLanguage, "stats_screen_instructions", nil, "Press ESC to go back")
+    love.graphics.printf(instructions, 0, windowHeight - statsScreenState.lineHeight - statsScreenState.padding, windowWidth, "center")
+end
+
+function handleStatsScreenInput(dt)
+    -- Placeholder: Will be implemented if complex input is needed later
+    -- For now, Esc is handled in love.keypressed
 end
 
 function loadGame()
