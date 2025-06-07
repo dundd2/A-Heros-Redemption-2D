@@ -23,7 +23,6 @@ This 2D demo is intentionally simplified and **does not include** features plann
 - **Movement**: This 2D game restricts player movement to direct transitions into duel states after the story mode, lacking free-roam exploration. A movement script is not included.  
 - **Weapon Switching**  
 - **Leveling System**: Character progression and EXP management  
-- **Small Monsters for Leveling (Grinding)**  
 - **Respawn System**  
 - **Room Event Triggers**: Events within rooms, such as traps, treasure, or monster encounters.  
 - **Equipment System**  

@@ -137,38 +137,6 @@ Integration Points: Inventory System, Monster System, Room Event Triggers (Chest
 Save/Load Impact: None directly, but interacts with systems that are saved (inventory).
 
 IV. Gameplay Systems - World & NPCs
-Small Monsters for Leveling (Grinding)
-Goal: Create a dedicated level for repeatable monster fights for EXP grinding, with auto-saving of EXP/level progress.
-Key Data Structures:
-GameData.grindingLevels = { [levelId] = { name_key="grind_forest_name", enemyPool={"enemy_goblin_weak", "enemy_slime"}, battleBg="battleBgForest" } }
-New enemy definitions in enemyData for "weaker" or specific grinding monsters.
-Core Logic:
-Access: Add an option in menuState.options or levelSelect to enter a grinding level.
-Level Setup:
-When entering a grinding level:
-currentGrindingLevelId = "grind_forest".
-transitionGameState(..., "battle").
-restartGame() modified:
-Instead of enemyData[menuState.levelSelect.currentLevel], pick a random enemy from GameData.grindingLevels[currentGrindingLevelId].enemyPool.
-Use the specified battleBg.
-Continuous Spawning:
-In love.update() where victory is checked (enemy.hp <= 0):
-If in a grinding level (check a flag like currentState.isGrinding = true):
-Grant EXP (grantExp()).
-Short delay (TimerSystem.create).
-Then, effectively call restartGame() again to spawn the next monster for the grinding level (reset player HP/MP partially or fully as desired for grinding, spawn new random enemy from pool).
-Exiting:
-Provide a UI button in the battle screen (only for grinding mode) or an Escape key option to "Leave Training" which transitionGameState("battle", "menu") and sets currentState.isGrinding = false.
-Auto-Save EXP/Level:
-Inside checkLevelUp(): If player.level actually increased, call saveGame(autosave_slot_or_main_slot).
-Alternatively, save only when the player chooses to exit the grinding level. This is less frequent and might be preferred.
-UI Components:
-Option in menu/level select.
-"Leave Training" button during grinding battles.
-Integration Points: restartGame(), love.update() (victory check), checkLevelUp(), saveGame().
-Save/Load Impact: Relies on the main save system. Frequent auto-saving needs care.
-
-
 Respawn System (for non-grinding, explorable levels)
 Goal: Make monsters reappear in explorable areas after being defeated.
 Key Data Structures:
@@ -266,27 +234,6 @@ Draw a clipped portion of levelData.mapImage centered on player.
 Draw icons for player, nearby entities.
 UI Components: Full map screen, Mini-map HUD element.
 Save/Load Impact: player.mapFog.
-
-MC’s Statistics Page
-Goal: Show detailed character statistics.
-Core Logic:
-New gameState = "statsScreen" (or part of Inventory/Equipment screen).
-drawStatsScreen():
-List all relevant stats from player table (HP, MP, Attack, Defense, CritRate, etc.).
-Distinguish between base stats and stats modified by equipment/buffs (requires player.baseStats and recalculatePlayerStats() from Equipment System).
-UI Components: Stats screen.
-Integration Points: player table, Equipment System.
-
-Quest Page (Journal)
-Goal: Allow player to review active and completed quests.
-Core Logic:
-New gameState = "questLogScreen".
-drawQuestLogScreen():
-Tabs for "Active" / "Completed".
-List quests from player.activeQuests or player.completedQuests.
-When a quest is selected, display its title, description, objectives, and progress from GameData.quests and player.activeQuests.
-UI Components: Quest log screen.
-Integration Points: Quest System.
 
 PDF Check
 
