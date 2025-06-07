@@ -40,7 +40,7 @@ For more detailed features and information about our current (Jan 2025) plans fo
 
 ## Built With
 
-*   [LÖVE2D 12.0](https://love2d.org/): A free, open-source 2D game Framework .
+*   [LÖVE2D 12.0 (Bestest Friend)](https://love2d.org/): A free, open-source 2D game Framework .
 
 ## How to Play
 
@@ -56,43 +56,124 @@ For more detailed features and information about our current (Jan 2025) plans fo
 
 ### Controls:
 
-*   **Menu:**
-    *   **Up/Down Arrow Keys:** Navigate menu options.
+*Note: Most UI interactions (buttons, selections) also support **Mouse Click**.*
+
+*   **General Hotkeys (available in most game states):**
+    *   `I`: Toggle Inventory screen.
+    *   `J`: Toggle Quest Log screen.
+    *   `C`: Toggle Character Stats screen.
+
+*   **Main Menu:**
+    *   **Up/Down Arrow Keys or W/S:** Navigate menu options.
     *   **Enter/Space:** Select menu option.
+    *   **Mouse Click:** Select menu option.
+
 *   **Level Select:**
-    *   **Up/Down Arrow Keys:** Choose a level.
-    *   **Enter:** Start the story and begin a battle for the selected level.
+    *   **Up/Down Arrow Keys or W/S:** Choose a level or grinding mission.
+    *   **Enter/Space:** Start the selected level/mission.
     *   **Esc:** Return to the main menu.
-*   **Story Mode:**
-    *   **Enter:** Continue to the next dialogue line.
-    *   **Esc:** Skip the dialogue and go directly to the battle.
+    *   **Mouse Click:** Select level/mission or back button.
+
+*   **Story Mode (Dialogue):**
+    *   **Enter/Space:** Continue to the next dialogue line.
+    *   **Esc:** Skip the entire dialogue sequence and proceed to the next game state (e.g., battle).
+    *   **Mouse Click (on dialogue box):** Continue dialogue.
+
 *   **Battle:**
-    *   **Up/Down Arrow Keys:** Navigate skill options.
-    *   **Enter/Space:** Select a skill.
-    *   **Esc:** Pause the game.
-    *   **Tab/I:** Toggle skill information screen.
-    *   **Up/Down Arrow Keys (Skill Screen):** Select a skill from the skill information screen
-*   **Pause Menu**
-     *   **Mouse Click:** Click the button to continue,restart or return to menu
-*   **Victory/Defeat Screen**
-    *   **Mouse Click:** Click the button to restart or return to menu
+    *   **Up/Down Arrow Keys or W/S:** Navigate action/skill options.
+    *   **Enter/Space:** Select and perform the chosen action/skill.
+    *   **Esc:** Pause the game, opening the Pause Menu.
+    *   `X`: Exit Grinding mode (only available if in a grinding level).
+    *   **Mouse Click:** Select action/skill buttons, or "Leave Training" button (if applicable).
+
+*   **Pause Menu:**
+    *   **Up/Down Arrow Keys or W/S:** Navigate options (Continue, Restart, Main Menu, Quit).
+    *   **Enter/Space:** Select option.
+    *   **Mouse Click:** Select option.
+
+*   **Victory/Defeat Screen:**
+    *   **Up/Down Arrow Keys or W/S:** Navigate options (Restart, Main Menu).
+    *   **Enter/Space:** Select option.
+    *   **Mouse Click:** Select option.
+
+*   **Options Menu:**
+    *   **Up/Down Arrow Keys or W/S:** Navigate options.
+    *   **Left/Right Arrow Keys or A/D:** Change value for selected option (Language, Resolution, Font Size, Toggles).
+    *   **Enter/Space:** Apply change (for Resolution) or toggle option. For "Back to Main Menu", selects it.
+    *   **Esc:** Return to the main menu.
+    *   **Mouse Click:** Select option, use on-screen arrows to change values, or click the back button.
+
+*   **Story Page / About Page / How to Play Page:**
+    *   **Mouse Wheel:** Scroll text (for Story and About pages).
+    *   **Esc:** Return to the main menu.
+    *   **Mouse Click (on Back button):** Return to the main menu.
+
+*   **Inventory Screen:**
+    *   **Arrow Keys or W/A/S/D:** Navigate inventory slots or equipment panel.
+    *   **Tab:** Switch focus between the inventory grid and the equipment panel.
+    *   **Enter/Space:**
+        *   In inventory: Equip selected item (if equippable), or use item (if consumable).
+        *   In equipment panel: Unequip selected item.
+    *   **Esc or I:** Close the Inventory screen and return to the previous game state.
+    *   **Mouse Click:** Select inventory slot or equipment slot. Double-click or select then use on-screen prompt (if available) to equip/unequip/use.
+
+*   **Quest Log Screen:**
+    *   **Up/Down Arrow Keys or W/S:** Navigate quests in the current list.
+    *   **Left/Right Arrow Keys or A/D:** Switch between "Active" and "Completed" quest tabs.
+    *   **Esc or J:** Close the Quest Log screen and return to the previous game state.
+    *   **Mouse Click:** Select a tab or a quest from the list.
+
+*   **Character Stats Screen:**
+    *   **Esc or C:** Close the Stats screen and return to the previous game state.
 
 ### Game Mechanics
 
-*   **Main Menu:** You can start a level or exit the game.
-*   **Level Select:** Select the level you want to play.
-*   **Story Mode:** there will be a story dialogue before each battle. Press Enter to continue, or Esc to skip.
+*   **Main Menu:** Navigate options to start a new game (via Level Select), load a saved game, adjust settings, view game story/about/how-to-play information, or exit.
+*   **Level Select:** Choose from story-based levels or repeatable grinding missions to engage in battles.
+*   **Story Mode:** Experience dialogues and narrative before battles. These can be advanced or skipped.
 *   **Battle System:**
-    *   The battle is turn-based. The player and enemy alternate their turns.
-    *   On your turn, you can choose between Attack, Defend, Special Attack and Heal skill.
-    *  Each skill has a cooldown period.
-    *   The enemy uses a simple AI to decide whether to attack or defend.
-    *   The battle ends when either the player's or the enemy's HP reaches 0.
-*  **Pause Menu:**
-    *   Press ESC in battle to pause the game
-    *   You can choose to continue the game, restart the game or return to the main menu
-* **Victory/Defeat:**
-    * After a battle ends, you can restart the game or return to the main menu
+    *   Engage in turn-based combat against enemies.
+    *   Player and enemy alternate turns.
+    *   Utilize skills: Attack, Defend, Special Attack, and Heal.
+    *   Skills have cooldown periods and some may consume MP.
+    *   Enemies operate with basic AI for their actions.
+    *   Combat concludes when either player or enemy HP is depleted.
+    *   Gain EXP after successful battles.
+*   **Character Progression (Leveling):**
+    *   Earn Experience Points (EXP) from battles.
+    *   Level up upon reaching EXP thresholds, potentially improving stats (details not explicitly shown to player beyond stat numbers).
+*   **Inventory System:**
+    *   Manage items collected during gameplay.
+    *   Accessible via the 'I' key.
+    *   Use consumable items like health potions.
+*   **Equipment System:**
+    *   Equip weapons and armor to enhance player stats (Attack, Defense, HP, etc.).
+    *   Items can be equipped/unequipped through the inventory screen.
+    *   Player stats in battle reflect equipped items.
+*   **Quest Log:**
+    *   Track active and completed quests.
+    *   Accessible via the 'J' key.
+    *   View quest objectives and rewards.
+*   **Character Statistics:**
+    *   View detailed player stats (Level, EXP, HP, MP, Attack, Defense, Crit Rate, Crit Damage).
+    *   Accessible via the 'C' key.
+*   **Game States & UI:**
+    *   Managed states include Menu, Level Select, Story, Battle, Pause, Victory, Defeat, Options, Inventory, Quest Log, Stats Screen, Story/About/How-To-Play Pages.
+    *   Interactive UI elements for navigation and actions, supporting both keyboard and mouse.
+*   **Pause Menu:**
+    *   Accessible during battle by pressing Esc.
+    *   Options: Continue, Restart battle, Return to Main Menu, Quit Game.
+*   **Victory/Defeat Screens:**
+    *   Displayed after battle resolution.
+    *   Options: Restart battle or Return to Main Menu.
+*   **Save/Load System:**
+    *   Save game progress from the Main Menu.
+    *   Load previously saved games from the Main Menu.
+*   **Options:**
+    *   Adjust settings like language (English/Chinese), screen resolution, fullscreen mode, font size scaling, and toggle audio (BGM/SFX) and cheat modes.
+*   **Grinding Levels:**
+    *   Special repeatable levels for gaining EXP and potentially items.
+    *   Can be exited mid-battle using the 'X' key.
 
 ## Skills Used
 

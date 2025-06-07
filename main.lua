@@ -1,7 +1,7 @@
 -- This is a Lua script for a 2D game called "A Hero's Redemption"
 -- This script contains the game's story, character definitions, level dialogues,
 -- and other game-related text in both English and Chinese.
--- Build with love-12.0-win64 Beta
+-- Build with love-12.0-win64 Beta (Bestest Friend)
 -- Created by Dundd2, 2025/1 ,Last update: 2025/6
 
 local GameData = require("game_data")

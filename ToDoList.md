@@ -1,9 +1,8 @@
 # A Hero's Redemption 2D TO DO LIST Before V1.0
-I. Core Engine & Setup
-Game Loading Screen
 
 II. Story Mode & Content
-Story Mode - Content Development & Implementation
+(Note: Basic level-based dialogue progression and endings are implemented. This section focuses on further enhancements.)
+Advanced Story Mode Features
 Goal: Implement the actual story, dialogues, events, and progression.
 Key Data Structures:
 GameData.story.levelIntros and GameData.story.ending are good.
@@ -31,7 +30,8 @@ Save/Load Impact: currentState (level, dialogue index), GameData.storyFlags, que
 
 
 III. Gameplay Systems - Character & Interaction
-Character Progression & Leveling System
+(Note: Basic EXP gain, leveling up, and stat increases are implemented. Player stats are displayed in battle and on a stats screen.)
+Advanced Character Progression & Skill Unlocking
 Goal: Refine and extend the existing leveling system.
 Key Data Structures:
 player table: Already has most necessary fields (Level, EXP, EXPToNextLevel, stats).
@@ -47,44 +47,6 @@ Update UI to reflect new skills.
 Visual/Audio Feedback: Add TimerSystem.create for a brief particle effect at player position and a sound effect.
 Integration Points: Monster kills, Quest System (for EXP rewards).
 Save/Load Impact: player stats, player.unlockedSkills (if used).
-
-
-Weapon Switching System
-Goal: Allow the player to equip different weapons affecting their combat abilities.
-UI Components: Part of Equipment/Inventory UI.
-
-Equipment System
-Goal: Allow player to equip items to enhance stats and potentially change appearance.
-Key Data Structures:
-player.equipment = { head=nil, chest="armor_id", legs=nil, weapon="weapon_id", accessory1=nil, accessory2=nil } (values are itemIds or nil).
-GameData.items: Equippable items need a slot property (e.g., slot="head") and a stats = { attack=5, defense=10 } property.
-player.baseStats = { attack=10, defense=5, ... } (stats without equipment).
-Core Logic:
-equipItem(inventorySlotIndex):
-Get itemId from player.inventory[inventorySlotIndex].
-Get itemData from GameData.items[itemId].
-Check itemData.slot. If player.equipment[itemData.slot] is not nil (something already equipped), call unequipItem(itemData.slot) first (moves old item to inventory).
-Move item from inventory to player.equipment[itemData.slot].
-Call recalculatePlayerStats().
-unequipItem(equipmentSlotKey):
-Get itemId from player.equipment[equipmentSlotKey].
-Try to add item back to inventory (use addItemToInventory). If inventory full, drop or prevent unequip.
-Set player.equipment[equipmentSlotKey] = nil.
-Call recalculatePlayerStats().
-recalculatePlayerStats():
-player.attack = player.baseStats.attack, player.defense = player.baseStats.defense, etc.
-Iterate through player.equipment. For each equipped itemId:
-Get itemData from GameData.items[itemId].
-Add itemData.stats to player's current stats.
-Update HP/MP if maxHP/maxMP changed.
-UI Components:
-Part of inventoryScreen or a dedicated equipmentScreen.
-drawEquipmentScreen():
-Show character silhouette/sprite.
-Display equipment slots around it with icons of equipped items.
-Allow interaction (click slot to unequip, or drag from inventory).
-Integration Points: Inventory System, Stat Display UI, Combat System.
-Save/Load Impact: player.equipment. player.baseStats if they can change (e.g. from permanent buffs).
 
 Item Pickup (Collectible Object)
 Goal: Allow player to collect items found in the game world.
@@ -165,7 +127,8 @@ UI Components: Visuals for traps, chests. Loot window.
 Integration Points: Player movement/collision, Loot System, Dialogue System.
 Save/Load Impact: trigger.isOpen, trigger.active for each trigger instance.
 
-NPC Quest and Trading System
+(Note: A Quest Log UI for viewing active/completed quests is implemented. This section focuses on NPC interaction for obtaining and turning in quests, and trading.)
+NPC Interaction, Quest Giving & Trading System
 Goal: Allow NPCs to give quests and trade items with the player.
 Key Data Structures:
 GameData.npcs = { [npcId] = { name_key, portrait_key, dialogue_greeting_key, quests_available={"q1","q2"}, trades_items_table_id, ...} }
@@ -224,8 +187,6 @@ Draw icons for player, nearby entities.
 UI Components: Full map screen, Mini-map HUD element.
 Save/Load Impact: player.mapFog.
 
-PDF Check
-
 ____________________
 Turn-based RPG using Love2D Framework. Personal demo for better understand the challenges in a larger Unity 3D group project later this year
 
@@ -234,4 +195,3 @@ Turn-based RPG using Love2D Framework. Personal demo for better understand the c
 -- and other game-related text in both English and Chinese.
 -- Build with love-12.0-win64 Beta
 -- Created by Dundd2, 2025/1
-
