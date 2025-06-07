@@ -146,6 +146,21 @@ M.story = {
           quest_log_reward_item = "- %{quantity}x %{item}",
           quest_log_no_quest_selected = "Select a quest to see details.",
           quest_log_instructions = "Up/Down: Select Quest | Left/Right: Change Tab | ESC: Back",
+          -- NPC and Quest Text Keys
+          npc_generic_quest_giver_1_name = "Old Man Willow",
+          npc_generic_quest_giver_1_greeting = "Well met, traveler. Got a moment?",
+          quest_gather_herbs_title = "Herb Gathering",
+          quest_gather_herbs_desc = "Old Man Willow needs 5 Medicinal Herbs for his remedies.",
+          quest_kill_rats_title = "Rat Problem",
+          quest_kill_rats_desc = "The cellar is infested! Please eliminate 3 rats.",
+          enemy_rat_key = "Giant Rat", -- Assuming this is an enemy name key
+
+          -- NPC Dialogue Options
+          npc_fallback_greeting = "Greetings, traveler.",
+          npc_dialogue_option_quests = "View Quests",
+          npc_dialogue_option_trade = "Trade",
+          npc_dialogue_option_goodbye = "Goodbye",
+
           -- Statistics Screen
           menu_statistics = "Statistics",
           menu_statistics_desc = "View your character's statistics",
@@ -174,6 +189,25 @@ M.story = {
           -- Enemy Names (add new ones)
           enemy_name_goblin_grunt = "Goblin Grunt",
           enemy_name_slime_weak = "Weak Slime",
+
+          -- Trade Screen Text Keys
+          trade_out_of_stock = "Out of stock for %{item}.",
+          trade_not_enough_gold = "Not enough gold.",
+          trade_item_purchased = "Purchased %{quantity}x %{item}.",
+          trade_empty_slot_sell = "Cannot sell from an empty slot.",
+          trade_not_enough_to_sell = "Not enough items to sell.",
+          trade_npc_will_not_buy = "This NPC will not buy %{item}.",
+          trade_item_sold = "Sold %{quantity}x %{item}.",
+          trade_sell_failed_remove = "Error selling item.",
+
+          -- NPC Quest Interaction Text Keys
+          npc_quest_already_done = "[Already Completed] %{quest_title}",
+          npc_quest_turn_in = "[Turn In] %{quest_title}",
+          npc_quest_in_progress = "[In Progress] %{quest_title}",
+          npc_quest_accept = "[Accept] %{quest_title}",
+          npc_quest_cannot_start = "[Unavailable] %{quest_title}",
+          npc_dialogue_option_back_to_main = "Back",
+
           story_page_title = "A Hero’s Redemption Story:",
           story_page_back_button = "Back to Menu",
           about_page_title = "About This Project:",
@@ -371,6 +405,21 @@ as the one who brought about "A Hero's Redemption."
           quest_log_reward_item = "- %{quantity}x %{item}",
           quest_log_no_quest_selected = "選擇一個任務以查看詳細資訊。",
           quest_log_instructions = "上/下：選擇任務 | 左/右：切換分頁 | ESC：返回",
+          -- NPC and Quest Text Keys (Chinese)
+          npc_generic_quest_giver_1_name = "柳树老翁",
+          npc_generic_quest_giver_1_greeting = "相遇即是缘，旅行者。有空吗？",
+          quest_gather_herbs_title = "草药收集",
+          quest_gather_herbs_desc = "柳树老翁需要5株药草来制作他的药剂。",
+          quest_kill_rats_title = "鼠患问题",
+          quest_kill_rats_desc = "地窖老鼠成灾！请消灭3只老鼠。",
+          enemy_rat_key = "巨鼠", -- 假设这是敌人名称键
+
+          -- NPC Dialogue Options (Chinese)
+          npc_fallback_greeting = "你好，旅行者。",
+          npc_dialogue_option_quests = "查看任务",
+          npc_dialogue_option_trade = "交易",
+          npc_dialogue_option_goodbye = "再见",
+
           -- Statistics Screen
           menu_statistics = "角色屬性",
           menu_statistics_desc = "查看角色的詳細統計數據",
@@ -399,6 +448,25 @@ as the one who brought about "A Hero's Redemption."
           -- Enemy Names (add new ones)
           enemy_name_goblin_grunt = "哥布林小兵",
           enemy_name_slime_weak = "弱小史萊姆",
+
+          -- Trade Screen Text Keys (Chinese)
+          trade_out_of_stock = "%{item}库存不足。",
+          trade_not_enough_gold = "金币不足。",
+          trade_item_purchased = "购买了 %{quantity}x %{item}。",
+          trade_empty_slot_sell = "不能出售空栏位中的物品。",
+          trade_not_enough_to_sell = "物品数量不足，无法出售。",
+          trade_npc_will_not_buy = "这位NPC不想购买%{item}。",
+          trade_item_sold = "出售了 %{quantity}x %{item}。",
+          trade_sell_failed_remove = "出售物品时发生错误。",
+
+          -- NPC Quest Interaction Text Keys (Chinese)
+          npc_quest_already_done = "[已经完成] %{quest_title}",
+          npc_quest_turn_in = "[交任务] %{quest_title}",
+          npc_quest_in_progress = "[进行中] %{quest_title}",
+          npc_quest_accept = "[接受] %{quest_title}",
+          npc_quest_cannot_start = "[无法进行] %{quest_title}",
+          npc_dialogue_option_back_to_main = "返回",
+
           story_page_title = "英雄的救贖 2D 故事：",
           story_page_back_button = "返回主選單",
           about_page_title = "關於此專案：",
@@ -660,49 +728,11 @@ as the one who brought about "A Hero's Redemption."
           else return "Hostile" end
       end
   },
-  quests = {
-      active = {},
-      completed = {},
-      addQuest = function(self, id, title, description)
-          self.active[id] = {title = title, description = description, objectives = {}}
-      end,
-      completeQuest = function(self, id)
-          if self.active[id] then
-              self.completed[id] = self.active[id]
-              self.active[id] = nil
-          end
-      end
-  },
   choices = {
       current = nil,
       makeChoice = function(self, options, callback)
           self.current = {options = options, callback = callback}
       end
-  },
-  quests = {
-      kill_goblins_1 = {
-          title_key = "quest_kill_goblins_1_title",
-          description_key = "quest_kill_goblins_1_desc",
-          objectives = {
-              { type = "kill", target_key = "enemy_name_goblin", requiredCount = 5 }
-          },
-          rewards = {
-              exp = 50,
-              gold = 20,
-              items = { {itemId = "potion_health_1", quantity = 1} }
-          }
-      },
-      collect_herbs_1 = {
-          title_key = "quest_collect_herbs_1_title",
-          description_key = "quest_collect_herbs_1_desc",
-          objectives = {
-              { type = "collect", item_id = "item_herb_1", requiredCount = 3 } -- Assuming "item_herb_1" will be defined in M.items
-          },
-          rewards = {
-              exp = 30,
-              gold = 10
-          }
-      }
   },
   items = {
     potion_health_1 = {
@@ -754,6 +784,82 @@ as the one who brought about "A Hero's Redemption."
         stats = { defense = 1, maxHp = 5 }, -- Example of affecting maxHp
         price = 10
     }
+  },
+  npcs = {
+    -- Example NPC structure
+    --[[
+    npc_generic_quest_giver_1 = {
+      name_key = "npc_generic_quest_giver_1_name", -- Needs to be added to M.story.text
+      portrait_key = "portrait_placeholder_npc", -- Optional: needs asset
+      dialogue_greeting_key = "npc_generic_quest_giver_1_greeting", -- Needs to be added to M.story.text
+      quests_available = {"quest_gather_herbs", "quest_kill_rats"}, -- List of quest IDs from M.quests
+      trades_items_table_id = "trade_table_general_store_1" -- ID from M.tradeTables
+    }
+    ]]
+  },
+  tradeTables = {
+    -- Example Trade Table structure
+    --[[
+    trade_table_general_store_1 = {
+      {itemId="potion_health_1", buyPrice=15, sellPrice=5, stock=10}, -- Player buys for 15, sells for 5. NPC has 10.
+      {itemId="item_herb_1", buyPrice=8, sellPrice=2, stock=20}
+    }
+    ]]
+  },
+  quests = {
+    quest_gather_herbs = {
+      title_key = "quest_gather_herbs_title",
+      description_key = "quest_gather_herbs_desc",
+      objectives = {
+        {type="collect", item_id="item_herb_1", count=5, currentProgress=0}
+      },
+      prerequisites = {
+        level = 1
+        -- quests = {"another_quest_id"}
+      },
+      rewards = {
+        exp = 50,
+        gold = 20,
+        items = { {itemId="potion_health_1", quantity=2} }
+      },
+      giver_npc_id = "npc_generic_quest_giver_1",
+      receiver_npc_id = "npc_generic_quest_giver_1"
+    },
+    quest_kill_rats = {
+      title_key = "quest_kill_rats_title",
+      description_key = "quest_kill_rats_desc",
+      objectives = {
+        {type="kill", target_enemy_key="enemy_rat_key", count=3, currentProgress=0}
+      },
+      prerequisites = {level = 1},
+      rewards = {exp = 30, gold = 10},
+      giver_npc_id = "npc_generic_quest_giver_1",
+      receiver_npc_id = "npc_generic_quest_giver_1"
+    }
+    -- Old quests commented out as they don't fit the new structure without more text keys.
+    -- kill_goblins_1 = {
+    --    title_key = "quest_kill_goblins_1_title",
+    --    description_key = "quest_kill_goblins_1_desc",
+    --    objectives = {
+    --        { type = "kill", target_key = "enemy_name_goblin", requiredCount = 5 }
+    --    },
+    --    rewards = {
+    --        exp = 50,
+    --        gold = 20,
+    --        items = { {itemId = "potion_health_1", quantity = 1} }
+    --    }
+    -- },
+    -- collect_herbs_1 = {
+    --    title_key = "quest_collect_herbs_1_title",
+    --    description_key = "quest_collect_herbs_1_desc",
+    --    objectives = {
+    --        { type = "collect", item_id = "item_herb_1", requiredCount = 3 }
+    --    },
+    --    rewards = {
+    --        exp = 30,
+    --        gold = 10
+    --    }
+    -- }
   }
 }
 

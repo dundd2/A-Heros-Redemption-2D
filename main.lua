@@ -101,6 +101,27 @@ local previousGameState = "menu" -- For inventory screen toggle
 local uiMessage = ""
 local uiMessageTimer = 0
 
+npcInteractionState = {
+    currentNpcId = nil,
+    dialogueOptions = {},
+    currentOptionIndex = 1 -- For keyboard navigation
+}
+
+tradeState = {
+    currentNpcId = nil,
+    npcInventory = {}, -- This might be deprecated if using npcItems directly from tradeTables
+    playerInventory = {}, -- This might be deprecated if using playerItems directly from player.inventory
+    npcItems = {}, -- Stores items NPC is selling (from their tradeTable)
+    playerItems = {}, -- Stores items player has (filtered from player.inventory)
+    focus = "player", -- "player" or "npc"
+    selectedPlayerItemIndex = 1,
+    selectedNpcItemIndex = 1,
+    npcScrollOffset = 0,
+    playerScrollOffset = 0,
+    itemsPerPage = 5 -- Example, can be adjusted
+}
+previousGameStateForTrade = nil -- Stores where to return after trade screen
+
 local function initText()
   GameData.initText() -- Call the initText from GameData
   currentGameLanguage = GameData.getCurrentLanguage() -- Sync the local variable
@@ -228,6 +249,8 @@ local VALID_GAME_STATES = {
     inventoryScreen = true,
     questLogScreen = true, -- New state
     statsScreen = true, -- New state
+    npcDialogue = true, -- NPC interaction state
+    tradeScreen = true, -- Trade screen state
 }
 local VALID_BATTLE_PHASES = {
     select = true,
@@ -805,6 +828,7 @@ enemy = {
    critRate = 5,
     critDamage = 1.2,
   defense = 3,
+  gold = 0, -- Added gold
   isDefending = false,
   status = {},
   combo = 0
@@ -1127,6 +1151,109 @@ function TimerSystem.update(dt)
                 TimerSystem.timers[id] = nil
             end
         end
+    elseif gameState == "npcDialogue" then
+        if key == "escape" then
+            transitionGameState("npcDialogue", previousGameState or "menu")
+            npcInteractionState.currentNpcId = nil
+            npcInteractionState.dialogueOptions = {}
+        elseif key == "up" or key == "w" then
+            npcInteractionState.currentOptionIndex = npcInteractionState.currentOptionIndex - 1
+            local firstSelectable = 1
+            if npcInteractionState.dialogueOptions[1] and npcInteractionState.dialogueOptions[1].type == "greeting" then
+                firstSelectable = 2 -- Greeting is not selectable, options start at index 2
+            end
+            if npcInteractionState.currentOptionIndex < firstSelectable and #npcInteractionState.dialogueOptions >= firstSelectable then
+                npcInteractionState.currentOptionIndex = #npcInteractionState.dialogueOptions
+            elseif #npcInteractionState.dialogueOptions < firstSelectable then -- Only greeting exists
+                 npcInteractionState.currentOptionIndex = 1
+            elseif npcInteractionState.currentOptionIndex < firstSelectable then -- Fallback if something unexpected
+                npcInteractionState.currentOptionIndex = firstSelectable
+            end
+        elseif key == "down" or key == "s" then
+            npcInteractionState.currentOptionIndex = npcInteractionState.currentOptionIndex + 1
+            local firstSelectable = 1
+            if npcInteractionState.dialogueOptions[1] and npcInteractionState.dialogueOptions[1].type == "greeting" then
+                 firstSelectable = 2
+            end
+            if npcInteractionState.currentOptionIndex > #npcInteractionState.dialogueOptions then
+                npcInteractionState.currentOptionIndex = firstSelectable -- Wrap to first selectable
+            end
+            -- Ensure it doesn't get stuck on greeting if only greeting exists or other edge cases
+            if #npcInteractionState.dialogueOptions < firstSelectable and #npcInteractionState.dialogueOptions > 0 then
+                npcInteractionState.currentOptionIndex = 1
+            elseif npcInteractionState.currentOptionIndex < firstSelectable and #npcInteractionState.dialogueOptions >= firstSelectable then
+                 npcInteractionState.currentOptionIndex = firstSelectable
+            end
+        elseif key == "return" or key == "space" then
+            processNpcDialogueSelection()
+        else
+            -- Handle number key selection (1 maps to first non-greeting option)
+            local numPressed = tonumber(key)
+            if numPressed and numPressed > 0 then
+                local targetIndex = numPressed
+                if npcInteractionState.dialogueOptions[1] and npcInteractionState.dialogueOptions[1].type == "greeting" then
+                    targetIndex = numPressed + 1 -- Adjust if greeting is the first element
+                end
+
+                if targetIndex <= #npcInteractionState.dialogueOptions and
+                   (npcInteractionState.dialogueOptions[targetIndex].type ~= "greeting" or #npcInteractionState.dialogueOptions == 1) then
+                    npcInteractionState.currentOptionIndex = targetIndex
+                    processNpcDialogueSelection()
+                end
+            end
+        end
+    elseif gameState == "npcDialogue" then
+        if key == "escape" then
+            transitionGameState("npcDialogue", previousGameState or "menu")
+            npcInteractionState.currentNpcId = nil
+            npcInteractionState.dialogueOptions = {}
+            npcInteractionState.currentOptionIndex = 1 -- Reset
+        elseif key == "up" or key == "w" then
+            npcInteractionState.currentOptionIndex = npcInteractionState.currentOptionIndex - 1
+            local firstSelectable = 1
+            if npcInteractionState.dialogueOptions[1] and npcInteractionState.dialogueOptions[1].type == "greeting" then
+                firstSelectable = 2
+            end
+            if npcInteractionState.currentOptionIndex < firstSelectable then
+                if #npcInteractionState.dialogueOptions < firstSelectable then -- Only greeting or empty
+                    npcInteractionState.currentOptionIndex = 1
+                else
+                    npcInteractionState.currentOptionIndex = #npcInteractionState.dialogueOptions
+                end
+            end
+        elseif key == "down" or key == "s" then
+            npcInteractionState.currentOptionIndex = npcInteractionState.currentOptionIndex + 1
+            local firstSelectable = 1
+            if npcInteractionState.dialogueOptions[1] and npcInteractionState.dialogueOptions[1].type == "greeting" then
+                 firstSelectable = 2
+            end
+            if npcInteractionState.currentOptionIndex > #npcInteractionState.dialogueOptions then
+                npcInteractionState.currentOptionIndex = firstSelectable
+            end
+            if #npcInteractionState.dialogueOptions < firstSelectable and #npcInteractionState.dialogueOptions > 0 then
+                npcInteractionState.currentOptionIndex = 1
+            elseif npcInteractionState.currentOptionIndex < firstSelectable and #npcInteractionState.dialogueOptions >= firstSelectable then
+                 npcInteractionState.currentOptionIndex = firstSelectable
+            end
+        elseif key == "return" or key == "space" then
+            if npcInteractionState.dialogueOptions[npcInteractionState.currentOptionIndex] then
+                processNpcDialogueSelection()
+            end
+        else
+            local numPressed = tonumber(key)
+            if numPressed and numPressed > 0 then
+                local targetOptionIndex = numPressed
+                if npcInteractionState.dialogueOptions[1] and npcInteractionState.dialogueOptions[1].type == "greeting" then
+                    targetOptionIndex = numPressed + 1
+                end
+
+                if targetOptionIndex <= #npcInteractionState.dialogueOptions and
+                   (npcInteractionState.dialogueOptions[targetOptionIndex].type ~= "greeting" or (#npcInteractionState.dialogueOptions == 1 and npcInteractionState.dialogueOptions[1].type == "greeting")) then
+                    npcInteractionState.currentOptionIndex = targetOptionIndex
+                    processNpcDialogueSelection()
+                end
+            end
+        end
     end
 end
 function addTimer(duration, callback, group)
@@ -1243,6 +1370,10 @@ function love.update(dt)
         handleQuestLogInput(dt)
     elseif gameState == "statsScreen" then
         handleStatsScreenInput(dt)
+    elseif gameState == "npcDialogue" then
+        handleNpcDialogueInput(dt)
+    elseif gameState == "tradeScreen" then
+        handleTradeScreenInput(dt) -- Placeholder, will be filled later
     end
 end
 
@@ -1624,6 +1755,157 @@ function handleStatsScreenInput(dt)
     -- For now, Esc is handled in love.keypressed
 end
 
+function initiateTrade(npcId)
+    if not npcId or not GameData.npcs[npcId] then
+        print("[TRADE ERROR] Cannot initiate trade: Invalid NPC ID or NPC data not found for " .. tostring(npcId))
+        return
+    end
+
+    local npcData = GameData.npcs[npcId]
+    if not npcData.trades_items_table_id then
+        print("[TRADE ERROR] NPC " .. npcId .. " has no trades_items_table_id defined.")
+        return
+    end
+
+    local tradeTable = GameData.tradeTables[npcData.trades_items_table_id]
+    if not tradeTable then
+        print("[TRADE ERROR] Trade table " .. npcData.trades_items_table_id .. " not found for NPC " .. npcId)
+        return
+    end
+
+    tradeState.currentNpcId = npcId
+    tradeState.npcItems = {} -- Clear previous NPC items
+    for _, itemEntry in ipairs(tradeTable) do
+        -- We only care about items the NPC sells (i.e., has a buyPrice)
+        -- Or items NPC buys (has sellPrice) if we want to show what they *might* buy,
+        -- but for now, let's focus on what they sell.
+        -- The buyItem function will check buyPrice.
+        -- The sellItem function will check sellPrice from the NPC's table.
+        if itemEntry.itemId and GameData.items[itemEntry.itemId] then -- Ensure item definition exists
+             -- Store a copy to avoid modifying GameData.tradeTables directly for stock changes during a session
+            local npcItemInstance = {}
+            for k,v in pairs(itemEntry) do npcItemInstance[k] = v end
+            table.insert(tradeState.npcItems, npcItemInstance)
+        else
+            print("[TRADE WARNING] Item ID " .. tostring(itemEntry.itemId) .. " in trade table " .. npcData.trades_items_table_id .. " does not exist in GameData.items.")
+        end
+    end
+
+    tradeState.playerItems = {} -- Clear previous player items
+    for i, itemSlot in ipairs(player.inventory) do
+        if itemSlot and itemSlot.itemId and GameData.items[itemSlot.itemId] then
+            -- Store a reference or a copy. Storing a copy might be safer if quantities change.
+            -- For now, let's store enough info to identify and sell.
+            table.insert(tradeState.playerItems, {
+                itemId = itemSlot.itemId,
+                quantity = itemSlot.quantity,
+                originalSlotIndex = i -- Important to map back to player.inventory
+            })
+        end
+    end
+
+    tradeState.focus = "player" -- Default focus
+    tradeState.selectedPlayerItemIndex = 1
+    tradeState.selectedNpcItemIndex = 1
+    tradeState.playerScrollOffset = 0
+    tradeState.npcScrollOffset = 0
+
+    print("[TRADE] Trade initiated with NPC: " .. npcId)
+    -- Note: Transition to "tradeScreen" will be handled by processNpcDialogueSelection
+end
+
+function drawTradeScreen()
+    local windowWidth = love.graphics.getWidth()
+    local windowHeight = love.graphics.getHeight()
+    love.graphics.clear(0.1, 0.15, 0.1, 1) -- Dark green background
+
+    local uiFont = resources.fonts.ui or love.graphics.getFont()
+    local titleFont = resources.fonts.battle or love.graphics.getFont()
+
+    love.graphics.setFont(titleFont)
+    love.graphics.setColor(1,1,1)
+    local npcName = tradeState.currentNpcId and GameData.getText(currentGameLanguage, GameData.npcs[tradeState.currentNpcId].name_key, nil, tradeState.currentNpcId) or "Unknown NPC"
+    love.graphics.printf("Trading with: " .. npcName, 0, 20, windowWidth, "center")
+
+    love.graphics.setFont(uiFont)
+    love.graphics.print("Player Gold: " .. player.gold, windowWidth - 150, 20)
+
+    local panelWidth = windowWidth * 0.45
+    local panelHeight = windowHeight * 0.7
+    local panelPadding = 20
+    local playerPanelX = panelPadding
+    local npcPanelX = windowWidth - panelWidth - panelPadding
+    local panelY = 80
+
+    -- Player Inventory Panel
+    if tradeState.focus == "player" then love.graphics.setColor(1,1,0,0.2) else love.graphics.setColor(0.2,0.2,0.2,0.8) end
+    love.graphics.rectangle("fill", playerPanelX, panelY, panelWidth, panelHeight)
+    love.graphics.setColor(1,1,1)
+    love.graphics.rectangle("line", playerPanelX, panelY, panelWidth, panelHeight)
+    love.graphics.printf("Your Items (Sell)", playerPanelX, panelY + 5, panelWidth, "center")
+
+    local itemY = panelY + 30
+    for i = tradeState.playerScrollOffset + 1, math.min(#tradeState.playerItems, tradeState.playerScrollOffset + tradeState.itemsPerPage) do
+        local item = tradeState.playerItems[i]
+        local itemName = GameData.getText(currentGameLanguage, GameData.items[item.itemId].name_key, nil, item.itemId)
+        local text = string.format("%s (x%d)", itemName, item.quantity)
+
+        -- Check sell price
+        local sellPriceText = " (NPC won't buy)"
+        local npcTradeTable = GameData.tradeTables[GameData.npcs[tradeState.currentNpcId].trades_items_table_id]
+        if npcTradeTable then
+            for _, npcItemEntry in ipairs(npcTradeTable) do
+                if npcItemEntry.itemId == item.itemId and npcItemEntry.sellPrice then
+                    sellPriceText = string.format(" (Sell for: %dG)", npcItemEntry.sellPrice)
+                    break
+                end
+            end
+        end
+        text = text .. sellPriceText
+
+        if i == tradeState.selectedPlayerItemIndex then love.graphics.setColor(1,1,0) else love.graphics.setColor(1,1,1) end
+        love.graphics.print(text, playerPanelX + 10, itemY)
+        itemY = itemY + uiFont:getHeight() + 5
+    end
+
+    -- NPC Inventory Panel
+    if tradeState.focus == "npc" then love.graphics.setColor(1,1,0,0.2) else love.graphics.setColor(0.2,0.2,0.2,0.8) end
+    love.graphics.rectangle("fill", npcPanelX, panelY, panelWidth, panelHeight)
+    love.graphics.setColor(1,1,1)
+    love.graphics.rectangle("line", npcPanelX, panelY, panelWidth, panelHeight)
+    love.graphics.printf("NPC Items (Buy)", npcPanelX, panelY + 5, panelWidth, "center")
+
+    itemY = panelY + 30
+    for i = tradeState.npcScrollOffset + 1, math.min(#tradeState.npcItems, tradeState.npcScrollOffset + tradeState.itemsPerPage) do
+        local itemEntry = tradeState.npcItems[i]
+        local itemName = GameData.getText(currentGameLanguage, GameData.items[itemEntry.itemId].name_key, nil, itemEntry.itemId)
+        local stockText = itemEntry.stock ~= nil and " (Stock: " .. itemEntry.stock .. ")" or " (Stock: Inf)"
+        local priceText = itemEntry.buyPrice and " (Buy for: " .. itemEntry.buyPrice .. "G)" or " (Not for sale)"
+        local text = itemName .. stockText .. priceText
+
+        if i == tradeState.selectedNpcItemIndex then love.graphics.setColor(1,1,0) else love.graphics.setColor(1,1,1) end
+        love.graphics.print(text, npcPanelX + 10, itemY)
+        itemY = itemY + uiFont:getHeight() + 5
+    end
+
+    love.graphics.setColor(1,1,1)
+    love.graphics.printf("Tab: Switch Panel | Up/Down: Select | Enter: Buy/Sell (1) | Esc: Exit", 0, windowHeight - 30, windowWidth, "center")
+
+    -- Display UI Messages (like "Not enough gold", etc.)
+    if uiMessage and uiMessageTimer > 0 then
+        love.graphics.setFont(uiFont)
+        love.graphics.setColor(1,1,0) -- Yellow for UI messages
+        local msgWidth = uiFont:getWidth(uiMessage)
+        love.graphics.printf(uiMessage, windowWidth / 2 - msgWidth / 2, windowHeight - 60, windowWidth, "center")
+    end
+end
+
+function handleTradeScreenInput(dt)
+    -- This is a placeholder for input handling.
+    -- Actual implementation will be complex due to item selection, scrolling, buy/sell actions.
+    -- Basic navigation and exit will be handled in love.keypressed for now.
+end
+
 function love.draw()
   if loadingState then
     drawLoadingScreen()
@@ -1668,6 +1950,10 @@ function love.draw()
     drawQuestLogScreen()
   elseif gameState == "statsScreen" then
     drawStatsScreen()
+  elseif gameState == "npcDialogue" then
+    drawNpcDialogueScreen()
+  elseif gameState == "tradeScreen" then
+    drawTradeScreen()
   end
   love.graphics.pop()
 end
@@ -3068,6 +3354,98 @@ function love.keypressed(key)
                 transitionGameState(gameState, "menu")
             end
         end
+    elseif gameState == "tradeScreen" then
+        if key == "escape" then
+            transitionGameState("tradeScreen", previousGameStateForTrade or "npcDialogue") -- Return to where we came from
+            previousGameStateForTrade = nil -- Clear it
+            -- Clear trade state or leave it for quick re-entry? For now, let's clear part of it.
+            -- tradeState.currentNpcId = nil -- Keep currentNpcId if we want to resume easily
+            -- tradeState.npcItems = {}
+            -- tradeState.playerItems = {}
+        elseif key == "tab" then
+            if tradeState.focus == "player" then
+                tradeState.focus = "npc"
+                tradeState.selectedNpcItemIndex = 1 -- Reset selection on focus change
+                tradeState.npcScrollOffset = 0
+            else
+                tradeState.focus = "player"
+                tradeState.selectedPlayerItemIndex = 1 -- Reset selection
+                tradeState.playerScrollOffset = 0
+            end
+            print("[TRADE] Focus switched to: " .. tradeState.focus)
+        elseif key == "up" or key == "w" then
+            if tradeState.focus == "player" and #tradeState.playerItems > 0 then
+                tradeState.selectedPlayerItemIndex = tradeState.selectedPlayerItemIndex - 1
+                if tradeState.selectedPlayerItemIndex < 1 then
+                    tradeState.selectedPlayerItemIndex = #tradeState.playerItems -- Wrap to bottom
+                end
+                -- Basic scrolling for player items
+                if tradeState.selectedPlayerItemIndex <= tradeState.playerScrollOffset then
+                    tradeState.playerScrollOffset = math.max(0, tradeState.selectedPlayerItemIndex - 1)
+                elseif tradeState.selectedPlayerItemIndex > tradeState.playerScrollOffset + tradeState.itemsPerPage then
+                    tradeState.playerScrollOffset = tradeState.selectedPlayerItemIndex - tradeState.itemsPerPage
+                end
+            elseif tradeState.focus == "npc" and #tradeState.npcItems > 0 then
+                tradeState.selectedNpcItemIndex = tradeState.selectedNpcItemIndex - 1
+                if tradeState.selectedNpcItemIndex < 1 then
+                    tradeState.selectedNpcItemIndex = #tradeState.npcItems -- Wrap to bottom
+                end
+                 -- Basic scrolling for NPC items
+                if tradeState.selectedNpcItemIndex <= tradeState.npcScrollOffset then
+                    tradeState.npcScrollOffset = math.max(0, tradeState.selectedNpcItemIndex - 1)
+                elseif tradeState.selectedNpcItemIndex > tradeState.npcScrollOffset + tradeState.itemsPerPage then
+                    tradeState.npcScrollOffset = tradeState.selectedNpcItemIndex - tradeState.itemsPerPage
+                end
+            end
+        elseif key == "down" or key == "s" then
+            if tradeState.focus == "player" and #tradeState.playerItems > 0 then
+                tradeState.selectedPlayerItemIndex = tradeState.selectedPlayerItemIndex + 1
+                if tradeState.selectedPlayerItemIndex > #tradeState.playerItems then
+                    tradeState.selectedPlayerItemIndex = 1 -- Wrap to top
+                end
+                -- Basic scrolling for player items
+                if tradeState.selectedPlayerItemIndex > tradeState.playerScrollOffset + tradeState.itemsPerPage then
+                    tradeState.playerScrollOffset = tradeState.selectedPlayerItemIndex - tradeState.itemsPerPage
+                elseif tradeState.selectedPlayerItemIndex == 1 then -- Wrapped to top
+                    tradeState.playerScrollOffset = 0
+                end
+            elseif tradeState.focus == "npc" and #tradeState.npcItems > 0 then
+                tradeState.selectedNpcItemIndex = tradeState.selectedNpcItemIndex + 1
+                if tradeState.selectedNpcItemIndex > #tradeState.npcItems then
+                    tradeState.selectedNpcItemIndex = 1 -- Wrap to top
+                end
+                -- Basic scrolling for NPC items
+                if tradeState.selectedNpcItemIndex > tradeState.npcScrollOffset + tradeState.itemsPerPage then
+                     tradeState.npcScrollOffset = tradeState.selectedNpcItemIndex - tradeState.itemsPerPage
+                elseif tradeState.selectedNpcItemIndex == 1 then -- Wrapped to top
+                    tradeState.npcScrollOffset = 0
+                end
+            end
+        elseif key == "return" or key == "space" then
+            if tradeState.focus == "player" then
+                if #tradeState.playerItems > 0 and tradeState.playerItems[tradeState.selectedPlayerItemIndex] then
+                    local itemToSell = tradeState.playerItems[tradeState.selectedPlayerItemIndex]
+                    print("[TRADE] Attempting to sell item: " .. itemToSell.itemId .. " from original slot: " .. itemToSell.originalSlotIndex)
+                    if sellItem(tradeState.currentNpcId, itemToSell.originalSlotIndex, 1) then -- Sell 1 quantity for now
+                        -- Refresh items after successful sale
+                        initiateTrade(tradeState.currentNpcId) -- This re-populates both lists
+                    end
+                else
+                    print("[TRADE] No player item selected or player item list is empty.")
+                end
+            elseif tradeState.focus == "npc" then
+                if #tradeState.npcItems > 0 and tradeState.npcItems[tradeState.selectedNpcItemIndex] then
+                    local itemToBuy = tradeState.npcItems[tradeState.selectedNpcItemIndex]
+                    print("[TRADE] Attempting to buy item: " .. itemToBuy.itemId)
+                    if buyItem(tradeState.currentNpcId, itemToBuy.itemId, 1) then -- Buy 1 quantity for now
+                        -- Refresh items after successful buy
+                        initiateTrade(tradeState.currentNpcId) -- This re-populates both lists
+                    end
+                else
+                     print("[TRADE] No NPC item selected or NPC item list is empty.")
+                end
+            end
+        end
     end
 
   if key == "i" then -- Hotkey to open/close inventory
@@ -3122,6 +3500,10 @@ function love.keypressed(key)
         end
     end
   end
+
+  -- if key == "n" then -- Test NPC interaction
+  --   initiateNpcDialogue("npc_generic_quest_giver_1") -- Assuming this NPC ID will be added to game_data.lua
+  -- end
 end
 function handleOptionsInputReturn()
   local option = optionsState.options[optionsState.currentOption]
@@ -3626,6 +4008,13 @@ function grantExp(amount)
     battleState.message = GameData.getText(currentGameLanguage, "battle_msg_exp_gain", {exp = amount})
     battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
     print("[GAME] Player gained " .. amount .. " EXP. Current EXP: " .. player.exp)
+
+    -- Quest progress update for kill objectives
+    -- Ensure 'enemy' table is accessible and has 'displayNameKey' when grantExp is called from enemy defeat
+    if enemy and enemy.displayNameKey then
+        updateQuestProgress("kill", enemy.displayNameKey, 1)
+    end
+
     checkLevelUp()
 end
 
@@ -3712,6 +4101,12 @@ function addItemToInventory(itemId, quantity)
         uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
         return false
     end
+
+    -- Quest progress update for collect objectives
+    -- This is called after successfully adding items.
+    -- The 'amount' parameter for updateQuestProgress here is 'quantity' of items added.
+    updateQuestProgress("collect", itemId, quantity)
+
     return true
 end
 
@@ -4532,6 +4927,10 @@ function drawBattleScene()
       love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
       love.graphics.setColor(1,1,1)
   end
+
+  -- if key == "n" then -- Test NPC interaction
+  --   initiateNpcDialogue("npc_generic_quest_giver_1") -- Assuming this NPC ID exists in GameData.npcs
+  -- end
 end
 function drawOptionsUI()
   local windowWidth = love.graphics.getWidth()
@@ -4714,6 +5113,7 @@ function saveGame()
             defense = player.defense,
             critRate = player.critRate,
             critDamage = player.critDamage,
+            gold = player.gold, -- Added gold to save data
             inventory = player.inventory,
             inventoryCapacity = player.inventoryCapacity,
             activeQuests = player.activeQuests,
@@ -4870,6 +5270,7 @@ function loadGame()
         player.defense = data.player.defense or player.defense
         player.critRate = data.player.critRate or player.critRate
         player.critDamage = data.player.critDamage or player.critDamage
+        player.gold = data.player.gold or 0 -- Added gold to load data
 
         player.activeQuests = data.player.activeQuests or {}
         player.completedQuests = data.player.completedQuests or {}
@@ -4932,4 +5333,677 @@ function loadGame()
     battleState.message = GameData.getText(currentGameLanguage, "game_loaded_success")
     battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
     return true
+end
+
+function displayNpcQuestOptions(npcId)
+    local npcData = GameData.npcs[npcId] or GameData.story.npcs[npcId]
+    if not npcData then
+        print("[QUEST UI] NPC data not found for " .. npcId .. " to display quest options.")
+        return
+    end
+
+    npcInteractionState.dialogueOptions = {} -- Clear previous options
+
+    -- Add a non-selectable greeting or context message
+    table.insert(npcInteractionState.dialogueOptions, {
+        text_key = npcData.dialogue_greeting_key or "npc_fallback_greeting", -- Or a specific quest greeting
+        type = "greeting_info_only" -- This type won't be selectable, just for display
+    })
+
+    if npcData.quests_available then
+        for _, questId in ipairs(npcData.quests_available) do
+            local questDef = GameData.quests[questId]
+            if questDef then
+                local questTitleText = GameData.getText(currentGameLanguage, questDef.title_key, nil, questId) -- Get title for substitutions
+                if player.completedQuests[questId] then
+                    table.insert(npcInteractionState.dialogueOptions, {
+                        text_key = "npc_quest_already_done",
+                        type = "info", -- Non-actionable, just info
+                        questId = questId,
+                        displayText = GameData.getText(currentGameLanguage, "npc_quest_already_done", {quest_title = questTitleText})
+                    })
+                elseif player.activeQuests[questId] then
+                    if player.activeQuests[questId].readyToTurnIn then -- Check our flag from isQuestComplete
+                        table.insert(npcInteractionState.dialogueOptions, {
+                            text_key = "npc_quest_turn_in",
+                            type = "turn_in_quest",
+                            questId = questId,
+                            displayText = GameData.getText(currentGameLanguage, "npc_quest_turn_in", {quest_title = questTitleText})
+                        })
+                    else
+                        table.insert(npcInteractionState.dialogueOptions, {
+                            text_key = "npc_quest_in_progress",
+                            type = "info",
+                            questId = questId,
+                            displayText = GameData.getText(currentGameLanguage, "npc_quest_in_progress", {quest_title = questTitleText})
+                        })
+                    end
+                elseif canStartQuest(questId) then
+                    table.insert(npcInteractionState.dialogueOptions, {
+                        text_key = "npc_quest_accept",
+                        type = "accept_quest",
+                        questId = questId,
+                        displayText = GameData.getText(currentGameLanguage, "npc_quest_accept", {quest_title = questTitleText})
+                    })
+                else
+                    -- This case means canStartQuest returned false for reasons other than already active/complete
+                    -- e.g. prerequisites not met.
+                    table.insert(npcInteractionState.dialogueOptions, {
+                        text_key = "npc_quest_cannot_start",
+                        type = "info",
+                        questId = questId,
+                        displayText = GameData.getText(currentGameLanguage, "npc_quest_cannot_start", {quest_title = questTitleText})
+                    })
+                end
+            else
+                print("[QUEST UI] Quest definition not found for ID: " .. questId)
+            end
+        end
+    end
+
+    -- Add a "Back" option to return to the main NPC dialogue
+    table.insert(npcInteractionState.dialogueOptions, {
+        text_key = "npc_dialogue_option_back_to_main",
+        type = "back_to_npc_main", -- This type will be handled in processNpcDialogueSelection
+        displayText = GameData.getText(currentGameLanguage, "npc_dialogue_option_back_to_main")
+    })
+
+    -- Reset currentOptionIndex to the first actual selectable option
+    npcInteractionState.currentOptionIndex = 1
+    if #npcInteractionState.dialogueOptions > 0 then
+        for i=1, #npcInteractionState.dialogueOptions do
+            if npcInteractionState.dialogueOptions[i].type ~= "greeting_info_only" and npcInteractionState.dialogueOptions[i].type ~= "info" then
+                npcInteractionState.currentOptionIndex = i
+                break
+            end
+        end
+         -- If all are info/greeting, default to first (though back should always be there)
+        if npcInteractionState.dialogueOptions[npcInteractionState.currentOptionIndex].type == "greeting_info_only" or
+           npcInteractionState.dialogueOptions[npcInteractionState.currentOptionIndex].type == "info" then
+            npcInteractionState.currentOptionIndex = #npcInteractionState.dialogueOptions -- Select "Back"
+        end
+    end
+
+    -- The game remains in "npcDialogue" state, drawNpcDialogueScreen will use the new options.
+    -- We might need to adjust drawNpcDialogueScreen to handle the 'displayText' field if it exists,
+    -- otherwise, it will use text_key. For now, this sets up the logic.
+    print("[NPC DIALOGUE] Switched to quest options for NPC: " .. npcId)
+end
+
+function initiateNpcDialogue(npcId)
+    local npcData = GameData.story.npcs[npcId] -- Attempt to get from GameData.story.npcs first
+    if not npcData then
+        -- If not found, try GameData.npcs (top level)
+        npcData = GameData.npcs[npcId]
+    end
+
+    if not npcData then
+        print("Error: NPC not found: " .. npcId .. " (checked GameData.story.npcs and GameData.npcs)")
+        return
+    end
+
+    npcInteractionState.currentNpcId = npcId
+    npcInteractionState.dialogueOptions = {}
+    npcInteractionState.currentOptionIndex = 1 -- Reset option index
+
+    -- Greeting
+    table.insert(npcInteractionState.dialogueOptions, {
+        text_key = npcData.dialogue_greeting_key or "npc_fallback_greeting",
+        type = "greeting"
+    })
+
+    -- Quests Option
+    if npcData.quests_available and #npcData.quests_available > 0 then
+        table.insert(npcInteractionState.dialogueOptions, {
+            text_key = "npc_dialogue_option_quests",
+            type = "quests"
+        })
+    end
+
+    -- Trade Option
+    if npcData.trades_items_table_id then
+        table.insert(npcInteractionState.dialogueOptions, {
+            text_key = "npc_dialogue_option_trade",
+            type = "trade"
+        })
+    end
+
+    -- Goodbye Option
+    table.insert(npcInteractionState.dialogueOptions, {
+        text_key = "npc_dialogue_option_goodbye",
+        type = "goodbye"
+    })
+
+    previousGameState = gameState -- Store current game state before transitioning
+    transitionGameState(gameState, "npcDialogue")
+
+    print("Interacting with NPC: " .. npcId .. ". Greeting: " .. GameData.getText(currentGameLanguage, npcData.dialogue_greeting_key or "npc_fallback_greeting"))
+    print("Available options:")
+    for i, opt in ipairs(npcInteractionState.dialogueOptions) do
+        -- Skip printing greeting as a numbered option if it's just for display
+        if opt.type ~= "greeting" or #npcInteractionState.dialogueOptions == 1 then
+             print(i .. ". " .. GameData.getText(currentGameLanguage, opt.text_key))
+        end
+    end
+end
+
+function canStartQuest(questId)
+    local questData = GameData.quests[questId]
+    if not questData then
+        print("[QUEST] Attempted to check startable for non-existent quest: " .. questId)
+        return false
+    end
+
+    -- Check player level
+    if questData.prerequisites and questData.prerequisites.level and player.level < questData.prerequisites.level then
+        print("[QUEST] Player level " .. player.level .. " too low for quest " .. questId .. " (requires " .. questData.prerequisites.level .. ")")
+        return false
+    end
+
+    -- Check prerequisite quests
+    if questData.prerequisites and questData.prerequisites.quests then
+        for _, requiredQuestId in ipairs(questData.prerequisites.quests) do
+            if not player.completedQuests[requiredQuestId] then
+                print("[QUEST] Prerequisite quest " .. requiredQuestId .. " not completed for quest " .. questId)
+                return false
+            end
+        end
+    end
+
+    -- Check if quest is already active or completed
+    if player.activeQuests[questId] then
+        print("[QUEST] Quest " .. questId .. " is already active.")
+        return false
+    end
+    if player.completedQuests[questId] then
+        print("[QUEST] Quest " .. questId .. " is already completed.")
+        return false
+    end
+
+    return true
+end
+
+function startQuest(questId)
+    if not canStartQuest(questId) then
+        print("[QUEST] Cannot start quest: " .. questId)
+        -- Optionally provide UI feedback here
+        return false
+    end
+
+    local questData = GameData.quests[questId]
+    if not questData then return false end -- Should have been caught by canStartQuest
+
+    player.activeQuests[questId] = {
+        id = questId,
+        objectives = {},
+        readyToTurnIn = false -- Initialize readyToTurnIn flag
+    }
+
+    -- Initialize objectives with currentProgress = 0
+    if questData.objectives then
+        for i, objDef in ipairs(questData.objectives) do
+            local newObj = {}
+            for k, v in pairs(objDef) do -- Deep copy the objective definition
+                newObj[k] = v
+            end
+            newObj.currentProgress = 0 -- Ensure currentProgress is set to 0
+            table.insert(player.activeQuests[questId].objectives, newObj)
+        end
+    end
+
+    print("[QUEST] Quest " .. questId .. " started!")
+    -- Optionally provide UI feedback here (e.g., "New Quest: [Quest Title]")
+    return true
+end
+
+function isQuestObjectiveComplete(questId, objectiveIndex)
+    local activeQuest = player.activeQuests[questId]
+    local questDef = GameData.quests[questId]
+
+    if not activeQuest or not questDef then
+        print("[QUEST ERROR] Quest not found for objective completion check: " .. questId)
+        return false
+    end
+    if not activeQuest.objectives[objectiveIndex] or not questDef.objectives[objectiveIndex] then
+        print("[QUEST ERROR] Objective index out of bounds for quest: " .. questId .. ", index: " .. objectiveIndex)
+        return false
+    end
+
+    local playerObjective = activeQuest.objectives[objectiveIndex]
+    -- Assuming the quest definition stores the target count in a field like 'count' or 'requiredCount'
+    local definitionObjective = questDef.objectives[objectiveIndex]
+    local requiredCount = definitionObjective.count or definitionObjective.requiredCount
+
+    if not requiredCount then
+        print("[QUEST ERROR] Objective definition for quest " .. questId .. ", objective " .. objectiveIndex .. " missing 'count' or 'requiredCount'.")
+        return false
+    end
+
+    return playerObjective.currentProgress >= requiredCount
+end
+
+function isQuestComplete(questId)
+    local activeQuest = player.activeQuests[questId]
+    if not activeQuest then
+        -- print("[QUEST] Quest " .. questId .. " not active, cannot check for completion.")
+        return false
+    end
+
+    local questDef = GameData.quests[questId]
+    if not questDef or not questDef.objectives or #questDef.objectives == 0 then
+        -- A quest with no objectives is considered complete by default once started.
+        -- Or, it could be an error in quest definition. For now, treat as completable.
+        if not activeQuest.readyToTurnIn then -- Avoid repeated prints
+            activeQuest.readyToTurnIn = true
+            print("[QUEST] Quest " .. questId .. " has no objectives and is ready to turn in.")
+        end
+        return true
+    end
+
+    if #activeQuest.objectives ~= #questDef.objectives then
+        print("[QUEST ERROR] Mismatch between active quest objective count and definition for " .. questId)
+        -- This might indicate an issue with how objectives were initialized in startQuest
+        return false
+    end
+
+    for i = 1, #activeQuest.objectives do
+        if not isQuestObjectiveComplete(questId, i) then
+            return false -- Found an incomplete objective
+        end
+    end
+
+    -- All objectives are complete
+    if not activeQuest.readyToTurnIn then -- Avoid repeated prints if already marked
+        activeQuest.readyToTurnIn = true
+        print("[QUEST] Quest " .. questId .. " is now complete and ready to turn in.")
+        -- Potentially add UI feedback: "Quest Complete: [Quest Title]"
+    end
+    return true
+end
+
+function updateQuestProgress(objectiveType, targetOrItemId, amount)
+    if not player.activeQuests then return end
+    if amount == nil then amount = 1 end -- Default amount to 1 if not provided
+
+    for questId, questData in pairs(player.activeQuests) do
+        if not questData.readyToTurnIn then
+            local questDef = GameData.quests[questId]
+            if questDef and questDef.objectives and questData.objectives then
+                for i, playerObjective in ipairs(questData.objectives) do
+                    -- Ensure the corresponding objective definition exists
+                    if questDef.objectives[i] then
+                        local objectiveDef = questDef.objectives[i]
+                        local objectiveMatched = false
+                        if objectiveDef.type == objectiveType then
+                            if objectiveType == "kill" and objectiveDef.target_enemy_key == targetOrItemId then
+                                objectiveMatched = true
+                            elseif objectiveType == "collect" and objectiveDef.item_id == targetOrItemId then
+                                objectiveMatched = true
+                            -- Add other objective types here if needed e.g. "talk", "reach_location"
+                            end
+                        end
+
+                        if objectiveMatched then
+                            local requiredCount = objectiveDef.count or objectiveDef.requiredCount
+                            if not requiredCount then
+                                print("[QUEST ERROR] Objective " .. i .. " for quest " .. questId .. " is missing 'count' or 'requiredCount'.")
+                                goto continue_objectives -- Skip this objective
+                            end
+
+                            if playerObjective.currentProgress < requiredCount then
+                                playerObjective.currentProgress = math.min(playerObjective.currentProgress + amount, requiredCount)
+                                print(string.format("[QUEST] Progress for %s - Objective %d (%s %s): %d/%d",
+                                    questId, i, objectiveType, targetOrItemId, playerObjective.currentProgress, requiredCount))
+
+                                -- Check if this specific objective is now complete
+                                if isQuestObjectiveComplete(questId, i) then
+                                     print(string.format("[QUEST] Objective %d for quest %s completed.", i, questId))
+                                end
+                                -- Check if the entire quest is now complete (this will also set readyToTurnIn)
+                                isQuestComplete(questId)
+                            end
+                        end
+                    else
+                        print("[QUEST ERROR] Mismatch in objective definitions for quest: " .. questId .. " at index " .. i)
+                    end
+                    ::continue_objectives::
+                end
+            end
+        end
+    end
+end
+
+function turnInQuest(questId)
+    local activeQuest = player.activeQuests[questId]
+    local questDef = GameData.quests[questId]
+
+    if not activeQuest or not questDef then
+        print("[QUEST] Cannot turn in quest " .. questId .. ": Not active or definition missing.")
+        return false
+    end
+
+    -- Ensure isQuestComplete is called, as it sets the readyToTurnIn flag
+    if not isQuestComplete(questId) and not activeQuest.readyToTurnIn then
+        print("[QUEST] Cannot turn in quest " .. questId .. ": Not yet complete.")
+        return false
+    end
+
+    -- Double check readyToTurnIn flag, belt and suspenders
+    if not activeQuest.readyToTurnIn then
+        print("[QUEST] Cannot turn in quest " .. questId .. ": Not marked as readyToTurnIn (completion logic error?).")
+        return false
+    end
+
+
+    print("[QUEST] Turning in quest: " .. questId)
+
+    -- Grant rewards
+    if questDef.rewards then
+        if questDef.rewards.exp then
+            player.exp = player.exp + questDef.rewards.exp
+            print("[QUEST REWARD] Granted " .. questDef.rewards.exp .. " EXP. Total EXP: " .. player.exp)
+            checkLevelUp() -- Check for level up after EXP gain
+        end
+        if questDef.rewards.gold then
+            player.gold = (player.gold or 0) + questDef.rewards.gold
+            print("[QUEST REWARD] Granted " .. questDef.rewards.gold .. " Gold. Total Gold: " .. player.gold)
+        end
+        if questDef.rewards.items then
+            for _, itemReward in ipairs(questDef.rewards.items) do
+                if addItemToInventory(itemReward.itemId, itemReward.quantity) then
+                    print("[QUEST REWARD] Granted " .. itemReward.quantity .. "x " .. itemReward.itemId)
+                else
+                    print("[QUEST REWARD] Failed to grant item " .. itemReward.itemId .. " (inventory full?)")
+                    -- Potentially handle this case, e.g., drop item or notify player more formally
+                end
+            end
+        end
+    end
+
+    player.activeQuests[questId] = nil
+    player.completedQuests[questId] = true
+    -- (Consider storing more info for completed quests if needed, e.g., completion date)
+
+    print("[QUEST] Quest " .. questId .. " turned in! Rewards granted.")
+    -- UI feedback: "Quest Turned In: [Quest Title]"
+    -- Could also remove from NPC's available list or change dialogue if that logic exists
+    return true
+end
+
+function drawNpcDialogueScreen()
+    -- Placeholder drawing function for NPC dialogue
+    love.graphics.clear(0.2, 0.2, 0.3, 1) -- Dark blue background for dialogue
+
+    local npcName = "Unknown NPC"
+    local greetingText = GameData.getText(currentGameLanguage, "npc_fallback_greeting")
+
+    if npcInteractionState.currentNpcId then
+        local npcData = GameData.npcs[npcInteractionState.currentNpcId] or GameData.story.npcs[npcInteractionState.currentNpcId]
+        if npcData then
+            npcName = GameData.getText(currentGameLanguage, npcData.name_key, nil, npcInteractionState.currentNpcId)
+            greetingText = GameData.getText(currentGameLanguage, npcData.dialogue_greeting_key or "npc_fallback_greeting")
+        end
+    end
+
+    love.graphics.setFont(resources.fonts.battle or love.graphics.getFont())
+    love.graphics.setColor(1,1,1)
+    love.graphics.print("Talking to: " .. npcName, 50, 50)
+
+    love.graphics.setFont(resources.fonts.ui or love.graphics.getFont())
+    love.graphics.printf(greetingText, 50, 100, love.graphics.getWidth() - 100, "left")
+
+    local yPos = 150
+    -- Calculate yPos based on greeting text height if greeting is the first option
+    if #npcInteractionState.dialogueOptions > 0 and npcInteractionState.dialogueOptions[1].type == "greeting" then
+        local fontToUse = resources.fonts.ui or love.graphics.getFont()
+        local wrappedGreetingText, _ = fontToUse:getWrap(greetingText, love.graphics.getWidth() - 100)
+        yPos = 100 + (#wrappedGreetingText * fontToUse:getHeight()) + 20
+    end
+
+    local displayOptionIndex = 1
+    for i, option in ipairs(npcInteractionState.dialogueOptions) do
+        if option.type ~= "greeting" then -- Don't list greeting as a selectable option
+            local optionText = GameData.getText(currentGameLanguage, option.text_key)
+
+            if i == npcInteractionState.currentOptionIndex then
+                love.graphics.setColor(1,1,0) -- Highlight selected option
+            else
+                love.graphics.setColor(1,1,1)
+            end
+            love.graphics.print(displayOptionIndex .. ". " .. optionText, 70, yPos)
+            yPos = yPos + 30
+            displayOptionIndex = displayOptionIndex + 1
+        end
+    end
+    love.graphics.setColor(1,1,1) -- Reset color
+end
+
+function handleNpcDialogueInput(dt)
+    -- Key presses for selection/action are handled in love.keypressed.
+    -- This function can be used for timed events or animations during NPC dialogue if needed in the future.
+    -- For now, it's a placeholder.
+end
+
+function processNpcDialogueSelection()
+    if not npcInteractionState.dialogueOptions or #npcInteractionState.dialogueOptions == 0 then return end
+
+    local selectedOptionData = npcInteractionState.dialogueOptions[npcInteractionState.currentOptionIndex]
+    if not selectedOptionData then
+        print("Error: No option data for current index: " .. npcInteractionState.currentOptionIndex)
+        return
+    end
+
+    print("Selected NPC dialogue option: " .. selectedOptionData.type .. " - " .. GameData.getText(currentGameLanguage, selectedOptionData.text_key))
+
+    if selectedOptionData.type == "greeting" or selectedOptionData.type == "greeting_info_only" or selectedOptionData.type == "info" then
+        -- These types are informational and typically shouldn't trigger actions by themselves,
+        -- or if they do, it's to cycle to the next actual selectable option.
+        -- The input handling in love.keypressed should ideally prevent selection of these
+        -- if there are other actionable items. If one of these *is* selected (e.g. only info options left),
+        -- it might be okay to do nothing or cycle. For now, no specific action.
+        print("NPC Action: Informational option selected or no action defined for type: " .. selectedOptionData.type)
+    elseif selectedOptionData.type == "quests" then
+        print("NPC Action: Show Quests for NPC ID: " .. npcInteractionState.currentNpcId)
+        displayNpcQuestOptions(npcInteractionState.currentNpcId)
+        -- Stays in "npcDialogue" state, options are updated by displayNpcQuestOptions
+    elseif selectedOptionData.type == "trade" then
+        print("NPC Action: Initiate Trade with NPC ID: " .. npcInteractionState.currentNpcId)
+        initiateTrade(npcInteractionState.currentNpcId)
+        previousGameStateForTrade = "npcDialogue" -- Store where to return from trade screen
+        transitionGameState("npcDialogue", "tradeScreen")
+        -- npcInteractionState remains as is, dialogue will resume if player exits trade to npcDialogue
+    elseif selectedOptionData.type == "accept_quest" then
+        if selectedOptionData.questId then
+            print("NPC Action: Accept Quest ID: " .. selectedOptionData.questId)
+            startQuest(selectedOptionData.questId)
+            -- Refresh NPC dialogue to show updated quest states (e.g., "In Progress")
+            -- or main options if preferred.
+            displayNpcQuestOptions(npcInteractionState.currentNpcId) -- Or initiateNpcDialogue(npcInteractionState.currentNpcId) for main menu
+        else
+            print("Error: accept_quest option selected but no questId found.")
+        end
+    elseif selectedOptionData.type == "turn_in_quest" then
+        if selectedOptionData.questId then
+            print("NPC Action: Turn In Quest ID: " .. selectedOptionData.questId)
+            turnInQuest(selectedOptionData.questId)
+            -- Refresh NPC dialogue
+            displayNpcQuestOptions(npcInteractionState.currentNpcId) -- Or initiateNpcDialogue(npcInteractionState.currentNpcId)
+        else
+            print("Error: turn_in_quest option selected but no questId found.")
+        end
+    elseif selectedOptionData.type == "back_to_npc_main" then
+        print("NPC Action: Back to main dialogue options for NPC ID: " .. npcInteractionState.currentNpcId)
+        initiateNpcDialogue(npcInteractionState.currentNpcId) -- Re-initialize main dialogue options
+    elseif selectedOptionData.type == "goodbye" then
+        print("NPC Action: Goodbye")
+        transitionGameState("npcDialogue", previousGameState or "menu")
+        npcInteractionState.currentNpcId = nil
+        npcInteractionState.dialogueOptions = {}
+        npcInteractionState.currentOptionIndex = 1 -- Reset
+    else
+        print("Warning: Unknown NPC dialogue option type: " .. selectedOptionData.type)
+        -- Default behavior: go back to previous state or menu
+        transitionGameState("npcDialogue", previousGameState or "menu")
+        npcInteractionState.currentNpcId = nil
+        npcInteractionState.dialogueOptions = {}
+        npcInteractionState.currentOptionIndex = 1
+    end
+end
+
+function buyItem(npcId, itemId, quantity)
+    if not npcId or not itemId or not quantity or quantity <= 0 then
+        print("[TRADE ERROR] Invalid parameters for buyItem: npcId=" .. tostring(npcId) .. ", itemId=" .. tostring(itemId) .. ", quantity=" .. tostring(quantity))
+        return false
+    end
+
+    local npcData = GameData.npcs[npcId]
+    if not npcData then
+        print("[TRADE ERROR] NPC data not found for npcId: " .. npcId)
+        return false
+    end
+
+    local tradeTableId = npcData.trades_items_table_id
+    if not tradeTableId then
+        print("[TRADE ERROR] NPC " .. npcId .. " does not have a trade table defined (trades_items_table_id is nil).")
+        return false
+    end
+
+    local tradeTable = GameData.tradeTables[tradeTableId]
+    if not tradeTable then
+        print("[TRADE ERROR] Trade table not found for id: " .. tradeTableId)
+        return false
+    end
+
+    local itemEntry = nil
+    for _, entry in ipairs(tradeTable) do
+        if entry.itemId == itemId then
+            itemEntry = entry
+            break
+        end
+    end
+
+    if not itemEntry then
+        print("[TRADE] Item " .. itemId .. " not found in NPC " .. npcId .. "'s trade table (" .. tradeTableId .. ").")
+        -- Potentially set a UI message: "This NPC does not sell that item."
+        return false
+    end
+
+    if not itemEntry.buyPrice or itemEntry.buyPrice <= 0 then
+        print("[TRADE] Item " .. itemId .. " is not for sale by NPC " .. npcId .. " (no buyPrice or invalid price).")
+        -- Potentially set a UI message: "This item is not for sale."
+        return false
+    end
+
+    if itemEntry.stock ~= nil and itemEntry.stock < quantity then
+        print("[TRADE] Not enough stock for item " .. itemId .. ". Requested: " .. quantity .. ", Available: " .. itemEntry.stock)
+        uiMessage = GameData.getText(currentGameLanguage, "trade_out_of_stock", {item = GameData.getText(currentGameLanguage, GameData.items[itemId].name_key, nil, itemId)}, "Out of stock for %{item}.")
+        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+        return false
+    end
+
+    local totalCost = itemEntry.buyPrice * quantity
+    if player.gold < totalCost then
+        print("[TRADE] Not enough gold to buy " .. quantity .. " of " .. itemId .. ". Cost: " .. totalCost .. ", Player Gold: " .. player.gold)
+        uiMessage = GameData.getText(currentGameLanguage, "trade_not_enough_gold", nil, "Not enough gold.")
+        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+        return false
+    end
+
+    local playerHasSpace = addItemToInventory(itemId, quantity) -- addItemToInventory handles its own print/UI messages for full inv
+
+    if playerHasSpace then
+        player.gold = player.gold - totalCost
+        if itemEntry.stock ~= nil then
+            itemEntry.stock = itemEntry.stock - quantity
+        end
+        local itemNameText = GameData.getText(currentGameLanguage, GameData.items[itemId].name_key, nil, itemId)
+        print("[TRADE] Player bought " .. quantity .. " of " .. itemId .. " for " .. totalCost .. " gold.")
+        uiMessage = GameData.getText(currentGameLanguage, "trade_item_purchased", {item = itemNameText, quantity = quantity}, "Purchased %{quantity}x %{item}.")
+        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+        return true
+    else
+        -- addItemToInventory should have printed "Inventory full"
+        -- We can add a more specific buy failed message if needed, but addItemToInventory's message is usually sufficient.
+        print("[TRADE] Purchase of " .. itemId .. " failed due to full inventory (as reported by addItemToInventory).")
+        -- uiMessage might be set by addItemToInventory, or we can set a generic "Purchase failed."
+        return false
+    end
+end
+
+function sellItem(npcId, playerInventorySlotIndex, quantityToSell)
+    if not npcId or not playerInventorySlotIndex or playerInventorySlotIndex < 1 or playerInventorySlotIndex > player.inventoryCapacity or not quantityToSell or quantityToSell <= 0 then
+        print("[TRADE ERROR] Invalid parameters for sellItem.")
+        return false
+    end
+
+    local itemInSlot = player.inventory[playerInventorySlotIndex]
+    if not itemInSlot then
+        print("[TRADE ERROR] No item in inventory slot " .. playerInventorySlotIndex .. " to sell.")
+        uiMessage = GameData.getText(currentGameLanguage, "trade_empty_slot_sell", nil, "Cannot sell from an empty slot.")
+        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+        return false
+    end
+
+    local itemId = itemInSlot.itemId
+    if itemInSlot.quantity < quantityToSell then
+        print("[TRADE ERROR] Not enough items in slot " .. playerInventorySlotIndex .. " to sell " .. quantityToSell .. ". Available: " .. itemInSlot.quantity)
+        uiMessage = GameData.getText(currentGameLanguage, "trade_not_enough_to_sell", nil, "Not enough items to sell.")
+        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+        return false
+    end
+
+    local npcData = GameData.npcs[npcId]
+    if not npcData then
+        print("[TRADE ERROR] NPC data not found for npcId: " .. npcId)
+        return false
+    end
+
+    local tradeTableId = npcData.trades_items_table_id
+    if not tradeTableId then
+        print("[TRADE ERROR] NPC " .. npcId .. " does not have a trade table defined.")
+        return false
+    end
+
+    local tradeTable = GameData.tradeTables[tradeTableId]
+    if not tradeTable then
+        print("[TRADE ERROR] Trade table not found for id: " .. tradeTableId)
+        return false
+    end
+
+    local itemEntry = nil
+    for _, entry in ipairs(tradeTable) do
+        if entry.itemId == itemId then
+            itemEntry = entry
+            break
+        end
+    end
+
+    if not itemEntry or not itemEntry.sellPrice or itemEntry.sellPrice <= 0 then
+        local itemNameText = GameData.getText(currentGameLanguage, GameData.items[itemId].name_key, nil, itemId)
+        print("[TRADE] NPC " .. npcId .. " does not want to buy item " .. itemId .. " or no sell price defined.")
+        uiMessage = GameData.getText(currentGameLanguage, "trade_npc_will_not_buy", {item = itemNameText}, "This NPC will not buy %{item}.")
+        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+        return false
+    end
+
+    local totalGain = itemEntry.sellPrice * quantityToSell
+    local itemRemoved = removeItemFromInventory(playerInventorySlotIndex, quantityToSell)
+
+    if itemRemoved then
+        player.gold = player.gold + totalGain
+        if itemEntry.stock ~= nil then -- If NPC tracks stock of items they buy (e.g., for limited demand)
+            itemEntry.stock = itemEntry.stock + quantityToSell
+        end
+        local itemNameText = GameData.getText(currentGameLanguage, GameData.items[itemId].name_key, nil, itemId)
+        print("[TRADE] Player sold " .. quantityToSell .. " of " .. itemId .. " for " .. totalGain .. " gold.")
+        uiMessage = GameData.getText(currentGameLanguage, "trade_item_sold", {item = itemNameText, quantity = quantityToSell}, "Sold %{quantity}x %{item}.")
+        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+        return true
+    else
+        -- This case should ideally not be reached if quantity checks are correct
+        print("[TRADE ERROR] Failed to remove item " .. itemId .. " from inventory slot " .. playerInventorySlotIndex .. " during selling process.")
+        uiMessage = GameData.getText(currentGameLanguage, "trade_sell_failed_remove", nil, "Error selling item.")
+        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+        return false
+    end
 end
