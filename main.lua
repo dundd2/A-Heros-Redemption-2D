@@ -226,6 +226,7 @@ local VALID_GAME_STATES = {
     levelSelect = true,
     aboutPage = true,
     inventoryScreen = true,
+    questLogScreen = true, -- New state
 }
 local VALID_BATTLE_PHASES = {
     select = true,
@@ -284,11 +285,29 @@ function transitionGameState(from, to)
             end
         end
 
-        if validatedTo == "menu" or validatedTo == "options" or validatedTo == "levelSelect" or validatedTo == "storyPage" or validatedTo == "aboutPage" or validatedTo == "inventoryScreen" then
+        if validatedTo == "menu" or validatedTo == "options" or validatedTo == "levelSelect" or validatedTo == "storyPage" or validatedTo == "aboutPage" or validatedTo == "inventoryScreen" or validatedTo == "questLogScreen" then
             if resources.sounds.menuBgm then
                 resources.sounds.menuBgm:setLooping(true)
                 resources.sounds.menuBgm:play()
                 print("[AUDIO] Started Menu BGM.")
+            end
+            if validatedTo == "questLogScreen" then -- Add this block
+                questLogState.currentTab = "active" -- Default to active tab
+                questLogState.selectedQuestIndex = 1
+                questLogState.activeQuestScrollOffset = 0
+                questLogState.completedQuestScrollOffset = 0
+
+                -- Attempt to select the first quest in the active tab
+                local firstActiveQuestId = nil
+                if player.activeQuests then
+                    local tempActiveQuests = {}
+                    for id, _ in pairs(player.activeQuests) do table.insert(tempActiveQuests, {id=id}) end
+                    if #tempActiveQuests > 0 then
+                        table.sort(tempActiveQuests, function(a,b) return a.id < b.id end)
+                        firstActiveQuestId = tempActiveQuests[1].id
+                    end
+                end
+                questLogState.selectedQuestId = firstActiveQuestId
             end
         elseif validatedTo == "battle" then
             if resources.sounds.battleBgm then
@@ -689,6 +708,8 @@ player = {
   isDefending = false,
   status = {},
   combo = 0,
+  activeQuests = {},
+  completedQuests = {},
   inventoryCapacity = 20,
   inventory = {}
 }
@@ -713,6 +734,22 @@ inventoryState = {
 }
 inventoryState.slotRows = math.ceil(player.inventoryCapacity / inventoryState.slotCols)
 inventoryState.detailsX = inventoryState.gridStartX + (inventoryState.slotWidth + inventoryState.slotPadding) * inventoryState.slotCols + 20
+
+questLogState = {
+    currentTab = "active", -- "active" or "completed"
+    selectedQuestId = nil,
+    activeQuestScrollOffset = 0,
+    completedQuestScrollOffset = 0,
+    questsPerPage = 5, -- Example, can be adjusted
+    tabAreas = {}, -- For mouse interaction later
+    questListArea = {}, -- For mouse interaction later
+    detailsArea = {}, -- For layout
+    lineHeight = 0, -- Will be set based on font
+    padding = 10,
+    selectedQuestIndex = 1, -- Index in the current list view
+    navDelayTimer = 0,      -- Timer for input delay
+    navDelay = 0.15        -- Delay between inputs
+}
 
 enemy = {
   x = 600,
@@ -850,6 +887,8 @@ print("[GAME] Battle state initialized")
       {textKey = "menu_options", action = function() transitionGameState(gameState, "options") end, descriptionKey = "menu_options_desc"},
       {textKey = "menu_story_page", action = function() transitionGameState(gameState, "storyPage") end, descriptionKey = "menu_story_page_desc"},
       {textKey = "menu_about", action = function() transitionGameState(gameState, "aboutPage") end, descriptionKey = "menu_about_desc"},
+      -- New Quest Log option:
+      {textKey = "menu_quest_log", action = function() transitionGameState(gameState, "questLogScreen") end, descriptionKey = "menu_quest_log_desc"},
       {textKey = "menu_save_game", action = function() saveGame() end, descriptionKey = "menu_save_game_desc"},
       {textKey = "menu_load_game", action = function() loadGame() end, descriptionKey = "menu_load_game_desc"},
       {textKey = "menu_exit", action = function() love.event.quit() end, descriptionKey = "menu_exit_desc"}
@@ -1111,8 +1150,313 @@ function love.update(dt)
         handleAboutPageInput(dt)
     elseif gameState == "inventoryScreen" then
         -- uiMessageTimer is handled globally now
+    elseif gameState == "questLogScreen" then
+        handleQuestLogInput(dt)
     end
 end
+
+function drawQuestLogScreen()
+    local windowWidth = love.graphics.getWidth()
+    local windowHeight = love.graphics.getHeight()
+    love.graphics.clear(0.1, 0.1, 0.15, 1) -- Dark background
+
+    local uiFont = resources.fonts.ui or love.graphics.newFont(16)
+    local titleFont = resources.fonts.battle or love.graphics.newFont(24)
+    questLogState.lineHeight = uiFont:getHeight() + 4 -- Add some padding
+
+    -- Title
+    love.graphics.setFont(titleFont)
+    love.graphics.setColor(1, 1, 1)
+    local titleText = GameData.getText(currentGameLanguage, "menu_quest_log") -- Re-use menu title
+    love.graphics.printf(titleText, 0, questLogState.padding, windowWidth, "center")
+
+    -- Tabs
+    love.graphics.setFont(uiFont)
+    local tabY = questLogState.padding * 2 + titleFont:getHeight()
+    local tabHeight = questLogState.lineHeight + questLogState.padding
+    local activeTabText = GameData.getText(currentGameLanguage, "quest_log_active", nil, "Active")
+    local completedTabText = GameData.getText(currentGameLanguage, "quest_log_completed", nil, "Completed")
+
+    local activeTabWidth = uiFont:getWidth(activeTabText) + questLogState.padding * 2
+    local completedTabWidth = uiFont:getWidth(completedTabText) + questLogState.padding * 2
+
+    questLogState.tabAreas.active = { x = questLogState.padding, y = tabY, width = activeTabWidth, height = tabHeight }
+    questLogState.tabAreas.completed = { x = questLogState.padding + activeTabWidth + questLogState.padding, y = tabY, width = completedTabWidth, height = tabHeight }
+
+    -- Draw Active Tab
+    if questLogState.currentTab == "active" then
+        love.graphics.setColor(0.4, 0.4, 0.5) -- Highlight active tab
+    else
+        love.graphics.setColor(0.2, 0.2, 0.3)
+    end
+    love.graphics.rectangle("fill", questLogState.tabAreas.active.x, questLogState.tabAreas.active.y, questLogState.tabAreas.active.width, questLogState.tabAreas.active.height)
+    love.graphics.setColor(1,1,1)
+    love.graphics.printf(activeTabText, questLogState.tabAreas.active.x + questLogState.padding, tabY + questLogState.padding / 2, activeTabWidth - questLogState.padding * 2, "center")
+
+    -- Draw Completed Tab
+    if questLogState.currentTab == "completed" then
+        love.graphics.setColor(0.4, 0.4, 0.5) -- Highlight active tab
+    else
+        love.graphics.setColor(0.2, 0.2, 0.3)
+    end
+    love.graphics.rectangle("fill", questLogState.tabAreas.completed.x, questLogState.tabAreas.completed.y, questLogState.tabAreas.completed.width, questLogState.tabAreas.completed.height)
+    love.graphics.setColor(1,1,1)
+    love.graphics.printf(completedTabText, questLogState.tabAreas.completed.x + questLogState.padding, tabY + questLogState.padding/2, completedTabWidth - questLogState.padding*2, "center")
+
+    -- Quest List Area
+    local listX = questLogState.padding
+    local listY = tabY + tabHeight + questLogState.padding
+    local listWidth = windowWidth * 0.4 - questLogState.padding * 1.5 -- Give some space between list and details
+    local listHeight = windowHeight - listY - questLogState.padding
+    questLogState.questListArea = {x = listX, y = listY, width = listWidth, height = listHeight}
+    love.graphics.setColor(0.2, 0.2, 0.25)
+    love.graphics.rectangle("fill", listX, listY, listWidth, listHeight)
+    love.graphics.setColor(1,1,1)
+
+    local questsToDisplay = {}
+    local currentScrollOffset = 0
+    if questLogState.currentTab == "active" then
+        if player.activeQuests then
+            for id, data in pairs(player.activeQuests) do
+                table.insert(questsToDisplay, {id = id, data = data})
+            end
+        end
+        currentScrollOffset = questLogState.activeQuestScrollOffset
+    else -- "completed"
+        if player.completedQuests then
+            for id, _ in pairs(player.completedQuests) do -- Assuming completedQuests stores IDs as keys
+                 table.insert(questsToDisplay, {id = id, data = GameData.quests[id]}) -- Fetch static data for completed
+            end
+        end
+        currentScrollOffset = questLogState.completedQuestScrollOffset
+    end
+
+    -- Sort quests by ID for consistent order (optional, but good for UI)
+    table.sort(questsToDisplay, function(a,b) return a.id < b.id end)
+
+    love.graphics.setScissor(listX, listY, listWidth, listHeight)
+    for i, questEntry in ipairs(questsToDisplay) do
+        if i > currentScrollOffset and i <= currentScrollOffset + questLogState.questsPerPage then
+            local questDef = GameData.quests[questEntry.id]
+            if questDef then
+                local questName = GameData.getText(currentGameLanguage, questDef.title_key, nil, questEntry.id)
+                local itemY = listY + (i - 1 - currentScrollOffset) * questLogState.lineHeight + questLogState.padding
+
+                if questEntry.id == questLogState.selectedQuestId then
+                    love.graphics.setColor(0.5, 0.5, 0.3) -- Highlight selected
+                    love.graphics.rectangle("fill", listX, itemY - questLogState.padding/2, listWidth, questLogState.lineHeight)
+                    love.graphics.setColor(1,1,0)
+                else
+                    love.graphics.setColor(1,1,1)
+                end
+                love.graphics.print(questName, listX + questLogState.padding, itemY)
+            end
+        end
+    end
+    love.graphics.setScissor()
+    love.graphics.setColor(1,1,1)
+
+
+    -- Quest Details Area
+    local detailsX = listX + listWidth + questLogState.padding
+    local detailsY = listY
+    local detailsWidth = windowWidth - detailsX - questLogState.padding
+    local detailsHeight = listHeight
+    questLogState.detailsArea = {x = detailsX, y = detailsY, width = detailsWidth, height = detailsHeight}
+    love.graphics.setColor(0.25, 0.25, 0.2)
+    love.graphics.rectangle("fill", detailsX, detailsY, detailsWidth, detailsHeight)
+    love.graphics.setColor(1,1,1)
+
+    love.graphics.setScissor(detailsX, detailsY, detailsWidth, detailsHeight)
+    if questLogState.selectedQuestId and GameData.quests[questLogState.selectedQuestId] then
+        local questDef = GameData.quests[questLogState.selectedQuestId]
+        local currentY = detailsY + questLogState.padding
+
+        -- Title
+        love.graphics.setFont(titleFont) -- Use larger font for title
+        local selectedTitle = GameData.getText(currentGameLanguage, questDef.title_key, nil, questLogState.selectedQuestId)
+        love.graphics.printf(selectedTitle, detailsX + questLogState.padding, currentY, detailsWidth - questLogState.padding*2, "left")
+        currentY = currentY + titleFont:getHeight() + questLogState.padding * 2
+        love.graphics.setFont(uiFont) -- Switch back to UI font
+
+        -- Description
+        local description = GameData.getText(currentGameLanguage, questDef.description_key, nil, "No description.")
+        love.graphics.printf(description, detailsX + questLogState.padding, currentY, detailsWidth - questLogState.padding*2, "left")
+        currentY = currentY + uiFont:getHeight(description, detailsWidth - questLogState.padding*2) + questLogState.lineHeight
+
+        -- Objectives
+        love.graphics.setColor(0.8, 0.9, 1)
+        love.graphics.print(GameData.getText(currentGameLanguage, "quest_log_objectives", nil, "Objectives:"), detailsX + questLogState.padding, currentY)
+        currentY = currentY + questLogState.lineHeight
+        love.graphics.setColor(1,1,1)
+
+        if questDef.objectives then
+            for i, obj in ipairs(questDef.objectives) do
+                local progressText = ""
+                if questLogState.currentTab == "active" and player.activeQuests[questLogState.selectedQuestId] and player.activeQuests[questLogState.selectedQuestId].objectives[i] then
+                    local currentProgress = player.activeQuests[questLogState.selectedQuestId].objectives[i].currentProgress or 0
+                    progressText = string.format(" (%d/%d)", currentProgress, obj.requiredCount)
+                elseif questLogState.currentTab == "completed" then
+                    progressText = string.format(" (%d/%d)", obj.requiredCount, obj.requiredCount) -- Show as completed
+                end
+
+                local objectiveText = ""
+                if obj.type == "kill" then
+                    local enemyName = GameData.getText(currentGameLanguage, obj.target_key, nil, obj.target_key)
+                    objectiveText = GameData.getText(currentGameLanguage, "quest_log_obj_kill", {target=enemyName, count=obj.requiredCount}, "- Kill %{count} %{target}") .. progressText
+                elseif obj.type == "collect" then
+                    local itemName = GameData.getText(currentGameLanguage, GameData.items[obj.item_id].name_key, nil, obj.item_id)
+                    objectiveText = GameData.getText(currentGameLanguage, "quest_log_obj_collect", {item=itemName, count=obj.requiredCount}, "- Collect %{count} %{item}") .. progressText
+                else
+                    objectiveText = "- Unknown objective type" .. progressText
+                end
+                love.graphics.printf(objectiveText, detailsX + questLogState.padding * 2, currentY, detailsWidth - questLogState.padding*3, "left")
+                currentY = currentY + uiFont:getHeight(objectiveText, detailsWidth - questLogState.padding*3) + questLogState.padding / 2
+            end
+        end
+        currentY = currentY + questLogState.lineHeight
+
+        -- Rewards
+        love.graphics.setColor(1, 0.9, 0.8)
+        love.graphics.print(GameData.getText(currentGameLanguage, "quest_log_rewards", nil, "Rewards:"), detailsX + questLogState.padding, currentY)
+        currentY = currentY + questLogState.lineHeight
+        love.graphics.setColor(1,1,1)
+
+        if questDef.rewards then
+            if questDef.rewards.exp then
+                love.graphics.print(GameData.getText(currentGameLanguage, "quest_log_reward_exp", {exp = questDef.rewards.exp}, "- %{exp} EXP"), detailsX + questLogState.padding * 2, currentY)
+                currentY = currentY + questLogState.lineHeight
+            end
+            if questDef.rewards.gold then
+                 love.graphics.print(GameData.getText(currentGameLanguage, "quest_log_reward_gold", {gold = questDef.rewards.gold}, "- %{gold} Gold"), detailsX + questLogState.padding * 2, currentY)
+                currentY = currentY + questLogState.lineHeight
+            end
+            if questDef.rewards.items then
+                for _, itemReward in ipairs(questDef.rewards.items) do
+                    local itemName = GameData.getText(currentGameLanguage, GameData.items[itemReward.itemId].name_key, nil, itemReward.itemId)
+                    local itemText = GameData.getText(currentGameLanguage, "quest_log_reward_item", {item=itemName, quantity=itemReward.quantity}, "- %{quantity}x %{item}")
+                    love.graphics.print(itemText, detailsX + questLogState.padding * 2, currentY)
+                    currentY = currentY + questLogState.lineHeight
+                end
+            end
+        end
+
+    else
+        love.graphics.printf(GameData.getText(currentGameLanguage, "quest_log_no_quest_selected", nil, "Select a quest to see details."), detailsX + questLogState.padding, detailsY + questLogState.padding, detailsWidth - questLogState.padding*2, "center")
+    end
+    love.graphics.setScissor()
+
+
+    -- Instructions
+    love.graphics.setFont(uiFont)
+    love.graphics.setColor(0.8, 0.8, 0.8)
+    local instructions = GameData.getText(currentGameLanguage, "quest_log_instructions", nil, "Up/Down: Select Quest | Left/Right: Change Tab | ESC: Back")
+    love.graphics.printf(instructions, 0, windowHeight - questLogState.lineHeight, windowWidth, "center")
+end
+
+function handleQuestLogInput(dt)
+    questLogState.navDelayTimer = questLogState.navDelayTimer + dt
+    if questLogState.navDelayTimer < questLogState.navDelay then
+        return -- Not enough time passed for next input
+    end
+
+    local inputProcessed = false
+    local currentQuestsArray = {}
+    local currentScrollOffset = 0
+    local isCompletedTab = questLogState.currentTab == "completed"
+
+    if questLogState.currentTab == "active" then
+        if player.activeQuests then
+            for id, data in pairs(player.activeQuests) do
+                table.insert(currentQuestsArray, {id = id, data = data})
+            end
+        end
+        currentScrollOffset = questLogState.activeQuestScrollOffset
+    else -- "completed"
+        if player.completedQuests then
+            for id, _ in pairs(player.completedQuests) do
+                table.insert(currentQuestsArray, {id = id, data = GameData.quests[id]})
+            end
+        end
+        currentScrollOffset = questLogState.completedQuestScrollOffset
+    end
+    table.sort(currentQuestsArray, function(a,b) return a.id < b.id end)
+
+    local totalQuestsInCurrentTab = #currentQuestsArray
+
+    if love.keyboard.isDown("up") or love.keyboard.isDown("w") then
+        if totalQuestsInCurrentTab > 0 then
+            questLogState.selectedQuestIndex = questLogState.selectedQuestIndex - 1
+            if questLogState.selectedQuestIndex < 1 then
+                questLogState.selectedQuestIndex = totalQuestsInCurrentTab -- Wrap to bottom
+                if isCompletedTab then
+                    questLogState.completedQuestScrollOffset = math.max(0, totalQuestsInCurrentTab - questLogState.questsPerPage)
+                else
+                    questLogState.activeQuestScrollOffset = math.max(0, totalQuestsInCurrentTab - questLogState.questsPerPage)
+                end
+            end
+            -- Scrolling up
+            if questLogState.selectedQuestIndex <= currentScrollOffset then
+                if isCompletedTab then
+                    questLogState.completedQuestScrollOffset = math.max(0, questLogState.selectedQuestIndex - 1)
+                else
+                    questLogState.activeQuestScrollOffset = math.max(0, questLogState.selectedQuestIndex - 1)
+                end
+            end
+            inputProcessed = true
+        end
+    elseif love.keyboard.isDown("down") or love.keyboard.isDown("s") then
+        if totalQuestsInCurrentTab > 0 then
+            questLogState.selectedQuestIndex = questLogState.selectedQuestIndex + 1
+            if questLogState.selectedQuestIndex > totalQuestsInCurrentTab then
+                questLogState.selectedQuestIndex = 1 -- Wrap to top
+                if isCompletedTab then
+                    questLogState.completedQuestScrollOffset = 0
+                else
+                    questLogState.activeQuestScrollOffset = 0
+                end
+            end
+            -- Scrolling down
+            if questLogState.selectedQuestIndex > currentScrollOffset + questLogState.questsPerPage then
+                 if isCompletedTab then
+                    questLogState.completedQuestScrollOffset = questLogState.selectedQuestIndex - questLogState.questsPerPage
+                else
+                    questLogState.activeQuestScrollOffset = questLogState.selectedQuestIndex - questLogState.questsPerPage
+                end
+            end
+            inputProcessed = true
+        end
+    elseif love.keyboard.isDown("left") or love.keyboard.isDown("a") then
+        if questLogState.currentTab == "completed" then
+            questLogState.currentTab = "active"
+            questLogState.selectedQuestIndex = 1
+            questLogState.activeQuestScrollOffset = 0
+            inputProcessed = true
+        end
+    elseif love.keyboard.isDown("right") or love.keyboard.isDown("d") then
+        if questLogState.currentTab == "active" then
+            questLogState.currentTab = "completed"
+            questLogState.selectedQuestIndex = 1
+            questLogState.completedQuestScrollOffset = 0
+            inputProcessed = true
+        end
+    end
+
+    if inputProcessed then
+        questLogState.navDelayTimer = 0 -- Reset timer
+        if totalQuestsInCurrentTab > 0 and questLogState.selectedQuestIndex >= 1 and questLogState.selectedQuestIndex <= totalQuestsInCurrentTab then
+             questLogState.selectedQuestId = currentQuestsArray[questLogState.selectedQuestIndex].id
+        elseif totalQuestsInCurrentTab == 0 then
+             questLogState.selectedQuestId = nil -- No quests to select
+             questLogState.selectedQuestIndex = 1 -- Reset index
+        else -- Index out of bounds, reset (should ideally not happen with wrapping)
+             questLogState.selectedQuestId = nil
+             questLogState.selectedQuestIndex = 1
+             if isCompletedTab then questLogState.completedQuestScrollOffset = 0 else questLogState.activeQuestScrollOffset = 0 end
+        end
+    end
+end
+
 function love.draw()
   if loadingState then
     drawLoadingScreen()
@@ -1153,6 +1497,8 @@ function love.draw()
     drawAboutPageUI()
   elseif gameState == "inventoryScreen" then
     drawInventoryScreen()
+  elseif gameState == "questLogScreen" then
+    drawQuestLogScreen()
   end
   love.graphics.pop()
 end
@@ -2279,6 +2625,10 @@ function love.keypressed(key)
   elseif gameState == "inventoryScreen" then
     if key == "up" then
         inventoryState.selectedSlot = inventoryState.selectedSlot - inventoryState.slotCols
+    elseif gameState == "questLogScreen" then
+        if key == "escape" then
+            transitionGameState(gameState, "menu") -- Or previousGameState if implemented
+        end
     elseif key == "down" then
         inventoryState.selectedSlot = inventoryState.selectedSlot + inventoryState.slotCols
     elseif key == "left" then
@@ -2307,9 +2657,23 @@ function love.keypressed(key)
       else
         transitionGameState(gameState, "menu")
       end
-    elseif gameState == "battle" or gameState == "menu" then
+    elseif gameState == "battle" or gameState == "menu" then -- Add other states from which inventory can be opened if needed
       previousGameState = gameState
       transitionGameState(gameState, "inventoryScreen")
+    end
+  end
+
+  if key == "j" then
+    if gameState == "questLogScreen" then
+        if previousGameState then
+            transitionGameState(gameState, previousGameState)
+            previousGameState = nil -- Clear it after use
+        else
+            transitionGameState(gameState, "menu") -- Fallback to menu
+        end
+    elseif gameState == "menu" or gameState == "battle" or gameState == "options" or gameState == "levelSelect" or gameState == "storyPage" or gameState == "aboutPage" or gameState == "inventoryScreen" then -- Ensure inventoryScreen is also a valid state to open questlog from
+        previousGameState = gameState -- Store current state
+        transitionGameState(gameState, "questLogScreen")
     end
   end
 
@@ -3661,6 +4025,8 @@ function saveGame()
             critDamage = player.critDamage,
             inventory = player.inventory,
             inventoryCapacity = player.inventoryCapacity,
+            activeQuests = player.activeQuests,
+            completedQuests = player.completedQuests,
         },
         currentState = {
             currentLevel = currentState.currentLevel,
@@ -3737,6 +4103,9 @@ function loadGame()
         player.defense = data.player.defense or player.defense
         player.critRate = data.player.critRate or player.critRate
         player.critDamage = data.player.critDamage or player.critDamage
+
+        player.activeQuests = data.player.activeQuests or {}
+        player.completedQuests = data.player.completedQuests or {}
 
         player.inventoryCapacity = data.player.inventoryCapacity or 20
         local loadedInventory = data.player.inventory or {}

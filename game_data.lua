@@ -22,6 +22,8 @@ M.story = {
           menu_save_game_desc = "Save current game progress", -- NEW
           menu_load_game = "Load Game", -- NEW
           menu_load_game_desc = "Load previous game progress", -- NEW
+          menu_quest_log = "Quest Log",
+          menu_quest_log_desc = "View your active and completed quests",
           level_select_title = "Select Level",
           level_number = "Level %{level}",
           pause_title = "Game Paused",
@@ -96,10 +98,27 @@ M.story = {
           game_saved_fail = "Failed to save game!", -- NEW
           item_potion_health_1_name = "Health Potion",
           item_potion_health_1_desc = "A simple potion that restores a small amount of health.",
+          quest_kill_goblins_1_title = "Goblin Slaying",
+          quest_kill_goblins_1_desc = "Defeat 5 Goblins in the forest.",
+          quest_collect_herbs_1_title = "Herb Collection",
+          quest_collect_herbs_1_desc = "Collect 3 Medicinal Herbs.",
+          item_herb_1_name = "Medicinal Herb", -- Example item for the collect quest
+          item_herb_1_desc = "A common herb used for its healing properties.", -- Example item
           game_load_no_file = "No save file found.", -- NEW
           game_load_fail = "Failed to load game!", -- NEW
           game_load_corrupt = "Save data corrupted!", -- NEW
           game_loaded_success = "Game loaded successfully!", -- NEW
+          quest_log_active = "Active",
+          quest_log_completed = "Completed",
+          quest_log_objectives = "Objectives:",
+          quest_log_rewards = "Rewards:",
+          quest_log_obj_kill = "- Kill %{count} %{target}",
+          quest_log_obj_collect = "- Collect %{count} %{item}",
+          quest_log_reward_exp = "- %{exp} EXP",
+          quest_log_reward_gold = "- %{gold} Gold",
+          quest_log_reward_item = "- %{quantity}x %{item}",
+          quest_log_no_quest_selected = "Select a quest to see details.",
+          quest_log_instructions = "Up/Down: Select Quest | Left/Right: Change Tab | ESC: Back",
           enemy_name_goblin = "Goblin",
           enemy_name_orc = "Orc",
           enemy_name_stonegolem = "Stone Golem",
@@ -183,6 +202,8 @@ as the one who brought about "A Hero's Redemption."
           menu_save_game_desc = "儲存目前的遊戲進度", -- NEW
           menu_load_game = "載入遊戲", -- NEW
           menu_load_game_desc = "載入上次的遊戲進度", -- NEW
+          menu_quest_log = "任務日誌",
+          menu_quest_log_desc = "查看你進行中和已完成的任務",
           level_select_title = "選擇關卡",
           level_number = "關卡 %{level}",
           pause_title = "遊戲暫停",
@@ -257,10 +278,27 @@ as the one who brought about "A Hero's Redemption."
           game_saved_fail = "儲存遊戲失敗！", -- NEW
           item_potion_health_1_name = "健康药水",
           item_potion_health_1_desc = "一种简单的药水，可以恢复少量生命值。",
+          quest_kill_goblins_1_title = "哥布林杀手",
+          quest_kill_goblins_1_desc = "在森林中击败5只哥布林。",
+          quest_collect_herbs_1_title = "草药收集",
+          quest_collect_herbs_1_desc = "收集3株药草。",
+          item_herb_1_name = "药草", -- 示例物品
+          item_herb_1_desc = "一种具有治疗功效的普通草药。", -- 示例物品
           game_load_no_file = "找不到存檔檔案。", -- NEW
           game_load_fail = "載入遊戲失敗！", -- NEW
           game_load_corrupt = "存檔資料損壞！", -- NEW
           game_loaded_success = "遊戲載入成功！", -- NEW
+          quest_log_active = "進行中",
+          quest_log_completed = "已完成",
+          quest_log_objectives = "目標：",
+          quest_log_rewards = "獎勵：",
+          quest_log_obj_kill = "- 擊殺 %{count} %{target}",
+          quest_log_obj_collect = "- 收集 %{count} %{item}",
+          quest_log_reward_exp = "- %{exp} 經驗值",
+          quest_log_reward_gold = "- %{gold} 金幣",
+          quest_log_reward_item = "- %{quantity}x %{item}",
+          quest_log_no_quest_selected = "選擇一個任務以查看詳細資訊。",
+          quest_log_instructions = "上/下：選擇任務 | 左/右：切換分頁 | ESC：返回",
           enemy_name_goblin = "哥布林",
           enemy_name_orc = "獸人",
           enemy_name_stonegolem = "石頭巨人",
@@ -549,6 +587,31 @@ as the one who brought about "A Hero's Redemption."
           self.current = {options = options, callback = callback}
       end
   },
+  quests = {
+      kill_goblins_1 = {
+          title_key = "quest_kill_goblins_1_title",
+          description_key = "quest_kill_goblins_1_desc",
+          objectives = {
+              { type = "kill", target_key = "enemy_name_goblin", requiredCount = 5 }
+          },
+          rewards = {
+              exp = 50,
+              gold = 20,
+              items = { {itemId = "potion_health_1", quantity = 1} }
+          }
+      },
+      collect_herbs_1 = {
+          title_key = "quest_collect_herbs_1_title",
+          description_key = "quest_collect_herbs_1_desc",
+          objectives = {
+              { type = "collect", item_id = "item_herb_1", requiredCount = 3 } -- Assuming "item_herb_1" will be defined in M.items
+          },
+          rewards = {
+              exp = 30,
+              gold = 10
+          }
+      }
+  },
   items = {
     potion_health_1 = {
       name_key = "item_potion_health_1_name",
@@ -561,6 +624,15 @@ as the one who brought about "A Hero's Redemption."
         {type = "heal", amount = 20}
       },
       price = 10 -- Example price
+    },
+    item_herb_1 = { -- New item
+        name_key = "item_herb_1_name",
+        description_key = "item_herb_1_desc",
+        icon_key = "icon_herb_green", -- Placeholder icon key
+        type = "quest", -- Or "material"
+        stackable = true,
+        maxStack = 20,
+        price = 5
     }
   }
 }
