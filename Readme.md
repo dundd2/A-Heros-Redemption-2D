@@ -40,7 +40,7 @@ For more detailed features and information about our current (Jan 2025) plans fo
 
 ## Built With
 
-*   [LÖVE2D 12.0 (Bestest Friend)](https://love2d.org/): A free, open-source 2D game Framework .
+*   [LÖVE2D 12.0 (Bestest Friend)](https://love2d.org/): A free, open-source 2D game Framework.
 
 ## How to Play
 
