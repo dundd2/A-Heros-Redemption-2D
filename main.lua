@@ -248,6 +248,29 @@ local function validateBattlePhase(phase)
     end
     return phase
 end
+
+-- Place this near other game constants or helper tables
+EQUIPPABLE_STATS = {"attack", "defense", "maxHp", "maxMp", "critRate", "critDamage"}
+-- Add other stats like "speed", "magicResist" if they become relevant later
+
+function recalculatePlayerStats()
+    print("[STATS] Recalculating player stats (HP/MP adjustment)...")
+
+    -- Ensure HP/MP consistency after maxHP/maxMP changes.
+    -- The actual stat changes (attack, defense etc.) will be done incrementally
+    -- by equipItem and unequipItem functions.
+
+    if player.maxHp <= 0 then player.maxHp = 1 end -- Prevent division by zero or weird HP
+    player.hp = math.min(player.hp, player.maxHp)
+    player.hp = math.max(0, player.hp) -- Ensure HP isn't negative
+
+    if player.maxMp <= 0 then player.maxMp = 1 end
+    player.mp = math.min(player.mp, player.maxMp)
+    player.mp = math.max(0, player.mp)
+
+    print(string.format("[STATS] Player stats after HP/MP adjustment: HP %d/%d, MP %d/%d", player.hp, player.maxHp, player.mp, player.maxMp))
+end
+
 function transitionGameState(from, to)
     local validatedFrom = validateGameState(from or "menu")
     local validatedTo = validateGameState(to)
@@ -712,7 +735,15 @@ player = {
   activeQuests = {},
   completedQuests = {},
   inventoryCapacity = 20,
-  inventory = {}
+  inventory = {},
+  equipment = {
+      head = nil,
+      chest = nil,
+      legs = nil,
+      weapon = nil,
+      accessory1 = nil,
+      accessory2 = nil
+  }
 }
 print("[GAME] Player settings initialized (with EXP/MP)")
 for i = 1, player.inventoryCapacity do
@@ -731,7 +762,12 @@ inventoryState = {
     detailsX = 0,
     detailsY = 100,
     uiMessage = "", -- Added for inventory messages
-    uiMessageTimer = 0 -- Added for inventory messages
+    uiMessageTimer = 0, -- Added for inventory messages
+    currentFocus = "inventory", -- "inventory" or "equipment"
+    selectedEquipmentSlotKey = nil, -- e.g., "head", "weapon"
+    equipmentSlotOrder = {"weapon", "head", "chest", "legs", "accessory1", "accessory2"}, -- Define display order
+    equipmentSlotDisplayAreas = {}, -- For drawing and mouse clicks
+    equipmentPanel = { x = 0, y = 0, width = 0, height = 0 } -- Define panel area
 }
 inventoryState.slotRows = math.ceil(player.inventoryCapacity / inventoryState.slotCols)
 inventoryState.detailsX = inventoryState.gridStartX + (inventoryState.slotWidth + inventoryState.slotPadding) * inventoryState.slotCols + 20
@@ -1710,7 +1746,84 @@ function drawInventoryScreen()
 
     love.graphics.setFont(itemFont)
     love.graphics.setColor(0.8,0.8,0.8)
-    love.graphics.printf("Use Arrow Keys to Navigate, I to Close, Enter to Use", inventoryState.gridStartX, windowHeight - 40, windowWidth - inventoryState.gridStartX*2, "center")
+    -- love.graphics.printf("Use Arrow Keys to Navigate, I to Close, Enter to Use", inventoryState.gridStartX, windowHeight - 40, windowWidth - inventoryState.gridStartX*2, "center")
+
+    -- Equipment Panel Drawing
+    local eqPanelX = inventoryState.detailsX;
+    local eqPanelY = inventoryState.detailsY + 120; -- Position below item details area, adjust as needed
+    local eqPanelWidth = windowWidth - eqPanelX - inventoryState.padding - 20;  -- Align with details area width
+    local eqSlotHeight = (itemFont:getHeight() + 4) * 2;
+    local eqPanelHeight = (#inventoryState.equipmentSlotOrder * eqSlotHeight) + inventoryState.padding * 3 + itemFont:getHeight();
+
+    inventoryState.equipmentPanel = {x = eqPanelX, y = eqPanelY, width = eqPanelWidth, height = eqPanelHeight};
+
+    love.graphics.setColor(0.12, 0.12, 0.18) -- Slightly different background for equipment panel
+    love.graphics.rectangle("fill", eqPanelX, eqPanelY, eqPanelWidth, eqPanelHeight)
+    love.graphics.setColor(1,1,1)
+    love.graphics.rectangle("line", eqPanelX, eqPanelY, eqPanelWidth, eqPanelHeight)
+    love.graphics.setFont(titleFont) -- Use a slightly larger font for the panel title
+    love.graphics.printf(GameData.getText(currentGameLanguage, "inventory_equipped_title", nil, "Equipped"), eqPanelX, eqPanelY + inventoryState.padding / 2, eqPanelWidth, "center")
+    love.graphics.setFont(itemFont) -- Switch back to itemFont for slots
+
+    local currentEqY = eqPanelY + titleFont:getHeight() + inventoryState.padding;
+    inventoryState.equipmentSlotDisplayAreas = {}
+
+    for i, slotKey in ipairs(inventoryState.equipmentSlotOrder) do
+        local slotDisplayName = GameData.getText(currentGameLanguage, "equip_slot_" .. slotKey, nil, slotKey:gsub("^%l", string.upper))
+        local itemInSlotId = player.equipment[slotKey]
+        local itemDisplayName = GameData.getText(currentGameLanguage, "equip_slot_empty", nil, "Empty")
+        if itemInSlotId then
+            local itemData = GameData.items[itemInSlotId]
+            if itemData then
+                itemDisplayName = GameData.getText(currentGameLanguage, itemData.name_key, nil, itemInSlotId)
+            else
+                itemDisplayName = "Unknown Item" -- Should not happen
+            end
+        end
+
+        local displayArea = {x = eqPanelX + inventoryState.padding, y = currentEqY, width = eqPanelWidth - inventoryState.padding*2, height = eqSlotHeight - 4}
+        inventoryState.equipmentSlotDisplayAreas[slotKey] = displayArea
+
+        if inventoryState.currentFocus == "equipment" and inventoryState.selectedEquipmentSlotKey == slotKey then
+            love.graphics.setColor(1,1,0,0.3)
+            love.graphics.rectangle("fill", displayArea.x, displayArea.y, displayArea.width, displayArea.height)
+        end
+
+        love.graphics.setColor(0.8,0.8,1)
+        love.graphics.print(slotDisplayName .. ":", displayArea.x + 5, displayArea.y + 2)
+        love.graphics.setColor(1,1,1)
+        love.graphics.printf(itemDisplayName, displayArea.x + 5, displayArea.y + itemFont:getHeight() + 4, displayArea.width - 10, "left")
+
+        currentEqY = currentEqY + eqSlotHeight
+    end
+
+    love.graphics.setColor(1,1,1) -- Reset color
+
+    -- Modified Prompts
+    local promptText = ""
+    local currentSelectedItem = player.inventory[inventoryState.selectedSlot]
+    if inventoryState.currentFocus == "inventory" and currentSelectedItem then
+        local itemData = GameData.items[currentSelectedItem.itemId]
+        if itemData and itemData.type == "equipment" then
+            promptText = GameData.getText(currentGameLanguage, "prompt_equip", nil, "Enter to Equip (Tab to switch focus)")
+        elseif itemData and itemData.type == "consumable" then
+            promptText = GameData.getText(currentGameLanguage, "prompt_use", nil, "Enter to Use (Tab to switch focus)")
+        else
+             promptText = GameData.getText(currentGameLanguage, "prompt_inventory_actions", nil, "I to Close (Tab to switch focus)")
+        end
+    elseif inventoryState.currentFocus == "equipment" then
+        if inventoryState.selectedEquipmentSlotKey and player.equipment[inventoryState.selectedEquipmentSlotKey] then
+            promptText = GameData.getText(currentGameLanguage, "prompt_unequip", nil, "Enter to Unequip (Tab to switch focus)")
+        else
+            promptText = GameData.getText(currentGameLanguage, "prompt_equipment_actions", nil, "I to Close (Tab to switch focus)")
+        end
+    else -- Default prompt if nothing specific
+        promptText = GameData.getText(currentGameLanguage, "prompt_general_inventory", nil, "I to Close (Tab to switch focus)")
+    end
+
+    love.graphics.setFont(itemFont)
+    love.graphics.setColor(0.8,0.8,0.8)
+    love.graphics.printf(promptText, inventoryState.gridStartX, windowHeight - 40, windowWidth - inventoryState.gridStartX*2, "center")
 end
 
 local uiLayoutConfig = {
@@ -2866,57 +2979,101 @@ function love.keypressed(key)
       print("[GAME STATE] Game state changed to 'menu' from aboutPage")
     end
   elseif gameState == "inventoryScreen" then
-    if key == "up" then
-        inventoryState.selectedSlot = inventoryState.selectedSlot - inventoryState.slotCols
-    elseif gameState == "questLogScreen" then
-        if key == "escape" then
-            -- Use previousGameState if available, similar to questLog and inventory
+        if key == "tab" then
+            if inventoryState.currentFocus == "inventory" then
+                inventoryState.currentFocus = "equipment"
+                inventoryState.selectedEquipmentSlotKey = inventoryState.equipmentSlotOrder[1]
+            else
+                inventoryState.currentFocus = "inventory"
+            end
+        elseif inventoryState.currentFocus == "inventory" then
+            if key == "up" then
+                inventoryState.selectedSlot = inventoryState.selectedSlot - inventoryState.slotCols
+            elseif key == "down" then
+                inventoryState.selectedSlot = inventoryState.selectedSlot + inventoryState.slotCols
+            elseif key == "left" then
+                inventoryState.selectedSlot = inventoryState.selectedSlot - 1
+            elseif key == "right" then
+                inventoryState.selectedSlot = inventoryState.selectedSlot + 1
+            elseif key == "return" or key == "space" then
+                local itemInSlot = player.inventory[inventoryState.selectedSlot]
+                if itemInSlot then
+                    local itemData = GameData.items[itemInSlot.itemId]
+                    if itemData and itemData.type == "equipment" then
+                        equipItem(inventoryState.selectedSlot)
+                    elseif itemData and itemData.type == "consumable" then
+                        useItem(inventoryState.selectedSlot)
+                    end
+                end
+            end
+            -- Clamp selectedSlot for inventory
+            if inventoryState.selectedSlot < 1 then
+                inventoryState.selectedSlot = inventoryState.selectedSlot + player.inventoryCapacity -- Wrap to bottom
+            elseif inventoryState.selectedSlot > player.inventoryCapacity then
+                inventoryState.selectedSlot = inventoryState.selectedSlot - player.inventoryCapacity -- Wrap to top
+            end
+
+        elseif inventoryState.currentFocus == "equipment" then
+            local currentIdx = -1
+            for i, slotKey in ipairs(inventoryState.equipmentSlotOrder) do
+                if slotKey == inventoryState.selectedEquipmentSlotKey then
+                    currentIdx = i
+                    break
+                end
+            end
+
+            if key == "up" or key == "w" then
+                if currentIdx > 1 then
+                    inventoryState.selectedEquipmentSlotKey = inventoryState.equipmentSlotOrder[currentIdx - 1]
+                else -- Wrap to bottom
+                    inventoryState.selectedEquipmentSlotKey = inventoryState.equipmentSlotOrder[#inventoryState.equipmentSlotOrder]
+                end
+            elseif key == "down" or key == "s" then
+                if currentIdx < #inventoryState.equipmentSlotOrder and currentIdx ~= -1 then
+                    inventoryState.selectedEquipmentSlotKey = inventoryState.equipmentSlotOrder[currentIdx + 1]
+                else -- Wrap to top or select first if none selected
+                    inventoryState.selectedEquipmentSlotKey = inventoryState.equipmentSlotOrder[1]
+                end
+            elseif key == "return" or key == "space" then
+                if inventoryState.selectedEquipmentSlotKey and player.equipment[inventoryState.selectedEquipmentSlotKey] then
+                    unequipItem(inventoryState.selectedEquipmentSlotKey)
+                end
+            end
+        end
+
+        -- Escape key to close inventory (applies to both focus states)
+        if key == "escape" or key == "i" then
             if previousGameState then
                 transitionGameState(gameState, previousGameState)
                 previousGameState = nil
             else
-                transitionGameState(gameState, "menu") -- Fallback to menu
+                transitionGameState(gameState, "menu")
+            end
+        end
+    elseif gameState == "questLogScreen" then
+        if key == "escape" then
+            if previousGameState then
+                transitionGameState(gameState, previousGameState)
+                previousGameState = nil
+            else
+                transitionGameState(gameState, "menu")
             end
         end
     elseif gameState == "statsScreen" then
         if key == "escape" then
-            -- Use previousGameState if available, similar to questLog and inventory
             if previousGameState then
                 transitionGameState(gameState, previousGameState)
                 previousGameState = nil
             else
-                transitionGameState(gameState, "menu") -- Fallback to menu
+                transitionGameState(gameState, "menu")
             end
         end
-    elseif key == "down" then
-        inventoryState.selectedSlot = inventoryState.selectedSlot + inventoryState.slotCols
-    elseif key == "left" then
-        inventoryState.selectedSlot = inventoryState.selectedSlot - 1
-    elseif key == "right" then
-        inventoryState.selectedSlot = inventoryState.selectedSlot + 1
-    elseif key == "return" or key == "space" then
-        local itemInSlot = player.inventory[inventoryState.selectedSlot]
-        if itemInSlot then
-            useItem(inventoryState.selectedSlot)
-        end
     end
-    -- Clamp selectedSlot to be within bounds
-    if inventoryState.selectedSlot < 1 then
-        inventoryState.selectedSlot = 1
-    elseif inventoryState.selectedSlot > player.inventoryCapacity then
-        inventoryState.selectedSlot = player.inventoryCapacity
-    end
-  end
 
-  if key == "i" then
+  if key == "i" then -- Hotkey to open/close inventory
     if gameState == "inventoryScreen" then
-      if previousGameState then
-        transitionGameState(gameState, previousGameState)
-        previousGameState = nil
-      else
-        transitionGameState(gameState, "menu")
-      end
-    elseif gameState == "battle" or gameState == "menu" then -- Add other states from which inventory can be opened if needed
+      -- This is now handled by the escape key logic within inventoryScreen block
+    elseif gameState == "battle" or gameState == "menu" or gameState == "questLogScreen" or gameState == "statsScreen" then
       previousGameState = gameState
       transitionGameState(gameState, "inventoryScreen")
     end
@@ -2990,6 +3147,14 @@ local function isPointInRect(x, y, rect)
     return x >= rect.x and x <= rect.x + rect.width and
            y >= rect.y and y <= rect.y + rect.height
 end
+
+function isInArray(array, value)
+    for _, v in ipairs(array) do
+        if v == value then return true end
+    end
+    return false
+end
+
 function love.mousepressed(x, y, button, istouch, presses)
     if button ~= 1 then return end
     local handled = false
@@ -3039,6 +3204,52 @@ function love.mousepressed(x, y, button, istouch, presses)
                 end
             end
         end
+
+        -- Mouse interaction for equipment slots
+        if inventoryState.equipmentSlotDisplayAreas then
+            for slotKey, area in pairs(inventoryState.equipmentSlotDisplayAreas) do
+                if isPointInRect(x, y, area) then
+                    if inventoryState.currentFocus == "equipment" and inventoryState.selectedEquipmentSlotKey == slotKey and player.equipment[slotKey] then
+                        unequipItem(slotKey) -- Double-click/second click on selected equipped item
+                    else
+                        inventoryState.currentFocus = "equipment"
+                        inventoryState.selectedEquipmentSlotKey = slotKey
+                    end
+                    handled = true
+                    break
+                end
+            end
+        end
+
+        -- Mouse interaction for inventory grid (modified for equip on second click)
+        if not handled then -- Only if not handled by equipment panel
+            for i = 1, player.inventoryCapacity do
+                local row = math.floor((i - 1) / inventoryState.slotCols)
+                local col = (i - 1) % inventoryState.slotCols
+                local itemX = inventoryState.gridStartX + col * (inventoryState.slotWidth + inventoryState.slotPadding)
+                local itemY = inventoryState.gridStartY + row * (inventoryState.slotHeight + inventoryState.slotPadding)
+                local area = {x = itemX, y = itemY, width = inventoryState.slotWidth, height = inventoryState.slotHeight}
+
+                if isPointInRect(x, y, area) then
+                    local itemInSlot = player.inventory[i]
+                    if inventoryState.currentFocus == "inventory" and inventoryState.selectedSlot == i and itemInSlot then
+                        -- This is a second click on an already selected inventory item
+                        local itemData = GameData.items[itemInSlot.itemId]
+                        if itemData and itemData.type == "equipment" then
+                            equipItem(i)
+                        elseif itemData and itemData.type == "consumable" then
+                            useItem(i) -- Existing logic
+                        end
+                    else
+                        inventoryState.currentFocus = "inventory"
+                        inventoryState.selectedSlot = i
+                    end
+                    handled = true
+                    break
+                end
+            end
+        end
+
         if menuState.levelSelect.backButtonArea then
           local backButtonRect = menuState.levelSelect.backButtonArea
           if isPointInRect(x, y, backButtonRect) then
@@ -3619,6 +3830,107 @@ function useItem(slotIndex)
     end
 end
 -- End Inventory Management Functions
+
+function equipItem(inventorySlotIndex)
+    if not inventorySlotIndex or not player.inventory[inventorySlotIndex] then
+        print("[EQUIP] Invalid inventory slot index or empty slot: " .. tostring(inventorySlotIndex))
+        return false
+    end
+
+    local itemToEquip = player.inventory[inventorySlotIndex]
+    local itemId = itemToEquip.itemId
+    local itemData = GameData.items[itemId]
+
+    if not itemData then
+        print("[EQUIP] No item data found for: " .. itemId)
+        return false
+    end
+
+    if itemData.type ~= "equipment" or not itemData.slot then
+        print("[EQUIP] Item is not equippable: " .. itemId)
+        uiMessage = GameData.getText(currentGameLanguage, "error_not_equippable", {item = GameData.getText(currentGameLanguage, itemData.name_key)}, "This item cannot be equipped.")
+        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+        return false
+    end
+
+    local targetSlot = itemData.slot
+    print("[EQUIP] Attempting to equip " .. itemId .. " to slot " .. targetSlot)
+
+    -- If slot is occupied, attempt to unequip existing item first
+    if player.equipment[targetSlot] then
+        print("[EQUIP] Slot " .. targetSlot .. " is occupied by " .. player.equipment[targetSlot] .. ". Attempting to unequip it.")
+        local unequippedSuccessfully = unequipItem(targetSlot)
+        if not unequippedSuccessfully then
+            print("[EQUIP] Failed to unequip item from slot " .. targetSlot .. ". Cannot equip new item.")
+            -- uiMessage is set by unequipItem on failure (e.g. inventory full)
+            return false
+        end
+    end
+
+    -- Apply new item's stats
+    if itemData.stats then
+        for statName, value in pairs(itemData.stats) do
+            if isInArray(EQUIPPABLE_STATS, statName) then
+                player[statName] = (player[statName] or 0) + value
+                print(string.format("[EQUIP] Applied stat %s: %s%s to player. New value: %s", statName, (value > 0 and "+" or ""), value, player[statName]))
+            end
+        end
+    end
+
+    player.equipment[targetSlot] = itemId       -- Store item ID in equipment slot
+    player.inventory[inventorySlotIndex] = nil -- Remove from inventory
+
+    recalculatePlayerStats() -- Adjust HP/MP if max values changed
+
+    local itemName = GameData.getText(currentGameLanguage, itemData.name_key, nil, itemId)
+    uiMessage = GameData.getText(currentGameLanguage, "item_equipped", {item = itemName, slot = targetSlot}, "%{item} equipped to %{slot}.")
+    uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+    print("[EQUIP] Successfully equipped " .. itemId .. " to " .. targetSlot)
+    return true
+end
+
+function unequipItem(equipmentSlotKey)
+    if not equipmentSlotKey or not player.equipment[equipmentSlotKey] then
+        print("[UNEQUIP] Invalid equipment slot key or no item in slot: " .. tostring(equipmentSlotKey))
+        return false
+    end
+
+    local itemIdToUnequip = player.equipment[equipmentSlotKey]
+    local itemData = GameData.items[itemIdToUnequip]
+
+    if not itemData then
+        print("[UNEQUIP] No item data for item to unequip: " .. itemIdToUnequip)
+        player.equipment[equipmentSlotKey] = nil
+        return true
+    end
+    print("[UNEQUIP] Attempting to unequip " .. itemIdToUnequip .. " from slot " .. equipmentSlotKey)
+
+    if not addItemToInventory(itemIdToUnequip, 1) then
+        print("[UNEQUIP] Inventory full. Cannot unequip " .. itemIdToUnequip)
+        uiMessage = GameData.getText(currentGameLanguage, "error_inventory_full_unequip", {item = GameData.getText(currentGameLanguage, itemData.name_key)}, "Inventory full. Cannot unequip %{item}.")
+        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+        return false
+    end
+
+    if itemData.stats then
+        for statName, value in pairs(itemData.stats) do
+            if isInArray(EQUIPPABLE_STATS, statName) then
+                player[statName] = (player[statName] or 0) - value
+                print(string.format("[UNEQUIP] Reverted stat %s: %s%s from player. New value: %s", statName, (value > 0 and "-" or "+"), value, player[statName]))
+            end
+        end
+    end
+
+    player.equipment[equipmentSlotKey] = nil
+
+    recalculatePlayerStats()
+
+    local itemName = GameData.getText(currentGameLanguage, itemData.name_key, nil, itemIdToUnequip)
+    uiMessage = GameData.getText(currentGameLanguage, "item_unequipped", {item = itemName, slot = equipmentSlotKey}, "%{item} unequipped from %{slot}.")
+    uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+    print("[UNEQUIP] Successfully unequipped " .. itemIdToUnequip .. " from " .. equipmentSlotKey)
+    return true
+end
 
 function exitGrindingMode()
     if currentState.isGrinding then

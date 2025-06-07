@@ -106,7 +106,32 @@ M.story = {
           quest_collect_herbs_1_desc = "Collect 3 Medicinal Herbs.",
           item_herb_1_name = "Medicinal Herb", -- Example item for the collect quest
           item_herb_1_desc = "A common herb used for its healing properties.", -- Example item
-          game_load_no_file = "No save file found.", -- NEW
+          -- Equippable Items
+          item_simple_sword_name = "Simple Sword",
+          item_simple_sword_desc = "A basic sword, better than nothing.",
+          item_leather_cap_name = "Leather Cap",
+          item_leather_cap_desc = "A simple cap made of treated leather.",
+          item_old_shirt_name = "Old Shirt",
+          item_old_shirt_desc = "A worn-out shirt. Offers minimal protection.",
+          error_not_equippable = "%{item} cannot be equipped.",
+          item_equipped = "%{item} equipped to %{slot}.",
+          item_unequipped = "%{item} unequipped from %{slot}.",
+          error_inventory_full_unequip = "Inventory full. Cannot unequip %{item}.",
+          inventory_equipped_title = "Equipped", -- NEW
+          equip_slot_weapon = "Weapon", -- NEW
+          equip_slot_head = "Head", -- NEW
+          equip_slot_chest = "Chest", -- NEW
+          equip_slot_legs = "Legs", -- NEW
+          equip_slot_accessory1 = "Accessory 1", -- NEW
+          equip_slot_accessory2 = "Accessory 2", -- NEW
+          equip_slot_empty = "Empty", -- NEW
+          prompt_equip = "Enter to Equip (Tab to switch)", -- NEW
+          prompt_unequip = "Enter to Unequip (Tab to switch)", -- NEW
+          prompt_use = "Enter to Use (Tab to switch focus)", -- NEW (already in draw logic)
+          prompt_inventory_actions = "I to Close (Tab to switch focus)", -- NEW (already in draw logic)
+          prompt_equipment_actions = "I to Close (Tab to switch focus)", -- NEW (already in draw logic)
+          prompt_general_inventory = "I to Close (Tab to switch focus)", -- NEW (already in draw logic)
+          game_load_no_file = "No save file found.",
           game_load_fail = "Failed to load game!", -- NEW
           game_load_corrupt = "Save data corrupted!", -- NEW
           game_loaded_success = "Game loaded successfully!", -- NEW
@@ -306,7 +331,32 @@ as the one who brought about "A Hero's Redemption."
           quest_collect_herbs_1_desc = "收集3株药草。",
           item_herb_1_name = "药草", -- 示例物品
           item_herb_1_desc = "一种具有治疗功效的普通草药。", -- 示例物品
-          game_load_no_file = "找不到存檔檔案。", -- NEW
+          -- Equippable Items
+          item_simple_sword_name = "简易之剑",
+          item_simple_sword_desc = "一把基础的剑，聊胜于无。",
+          item_leather_cap_name = "皮革帽",
+          item_leather_cap_desc = "一顶由处理过的皮革制成的简单帽子。",
+          item_old_shirt_name = "旧衬衫",
+          item_old_shirt_desc = "一件破旧的衬衫，提供极少的保护。",
+          error_not_equippable = "%{item}无法装备。",
+          item_equipped = "已将%{item}装备到%{slot}。",
+          item_unequipped = "已从%{slot}卸下%{item}。",
+          error_inventory_full_unequip = "物品栏已满，无法卸下%{item}。",
+          inventory_equipped_title = "已装备", -- NEW
+          equip_slot_weapon = "武器", -- NEW
+          equip_slot_head = "头部", -- NEW
+          equip_slot_chest = "胸部", -- NEW
+          equip_slot_legs = "腿部", -- NEW
+          equip_slot_accessory1 = "饰品1", -- NEW
+          equip_slot_accessory2 = "饰品2", -- NEW
+          equip_slot_empty = "空", -- NEW
+          prompt_equip = "按 Enter 装备 (Tab 切换焦点)", -- NEW
+          prompt_unequip = "按 Enter 卸下 (Tab 切换焦点)", -- NEW
+          prompt_use = "按 Enter 使用 (Tab 切换焦点)", -- NEW (already in draw logic)
+          prompt_inventory_actions = "按 I 关闭 (Tab 切换焦点)", -- NEW (already in draw logic)
+          prompt_equipment_actions = "按 I 关闭 (Tab 切换焦点)", -- NEW (already in draw logic)
+          prompt_general_inventory = "按 I 关闭 (Tab 切换焦点)", -- NEW (already in draw logic)
+          game_load_no_file = "找不到存檔檔案。",
           game_load_fail = "載入遊戲失敗！", -- NEW
           game_load_corrupt = "存檔資料損壞！", -- NEW
           game_loaded_success = "遊戲載入成功！", -- NEW
@@ -675,6 +725,34 @@ as the one who brought about "A Hero's Redemption."
         stackable = true,
         maxStack = 20,
         price = 5
+    },
+
+    simple_sword = {
+        name_key = "item_simple_sword_name",
+        description_key = "item_simple_sword_desc",
+        icon_key = "icon_sword_basic", -- Placeholder icon key
+        type = "equipment",
+        slot = "weapon",
+        stats = { attack = 3, critRate = 1 },
+        price = 25
+    },
+    leather_cap = {
+        name_key = "item_leather_cap_name",
+        description_key = "item_leather_cap_desc",
+        icon_key = "icon_cap_leather", -- Placeholder icon key
+        type = "equipment",
+        slot = "head",
+        stats = { defense = 2 },
+        price = 15
+    },
+    old_shirt = {
+        name_key = "item_old_shirt_name",
+        description_key = "item_old_shirt_desc",
+        icon_key = "icon_shirt_old", -- Placeholder icon key
+        type = "equipment",
+        slot = "chest",
+        stats = { defense = 1, maxHp = 5 }, -- Example of affecting maxHp
+        price = 10
     }
   }
 }
