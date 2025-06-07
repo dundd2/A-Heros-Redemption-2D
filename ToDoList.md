@@ -3,19 +3,6 @@ I. Core Engine & Setup
 Game Loading Screen
 
 II. Story Mode & Content
-Story Mode - Chinese UTF-8 Bug Fix
-Goal: Ensure all Chinese text displays correctly.
-Core Logic (Troubleshooting Steps):
-File Encoding: Verify ALL .lua files and any external text files (if used by GameData) are saved as "UTF-8" (without BOM is usually safer, but test with BOM if issues persist). Use a text editor like Notepad++ or VS Code to check and convert encoding.
-Font: Ensure assets/chinese-font.ttf fully supports all characters used. Sometimes fonts have incomplete character sets. Test with a known comprehensive Chinese font if problems continue.
-GameData.lua:
-When defining GameData.texts.zh, ensure the strings are directly embedded as UTF-8 in the Lua file.
-Avoid any string manipulation functions that might not be UTF-8 aware on the Chinese text before it's displayed (e.g., certain pattern matching or byte-level manipulation). string.format is generally safe.
-LÖVE/LuaJIT: LÖVE and LuaJIT have good UTF-8 support. The issue is most likely in file encoding, font, or how strings are handled in your code.
-Test Case: Create a minimal test: love.graphics.setFont(resources.fonts.chineseUI); love.graphics.print("你好世界", 100, 100) in love.draw() to isolate the issue.
-Integration Points: GameData.initText(), GameData.getText(), all love.graphics.print/printf calls using Chinese fonts.
-Save/Load Impact: If story progress involves saving Chinese text strings (e.g., player-entered names, though unlikely here), ensure the save file itself is UTF-8. table_to_string should handle UTF-8 strings correctly.
-
 Story Mode - Content Development & Implementation
 Goal: Implement the actual story, dialogues, events, and progression.
 Key Data Structures:
@@ -77,36 +64,6 @@ UI Components: Part of Equipment/Inventory UI.
 Integration Points: Equipment System, Combat System (calculateDamage uses player.attack).
 Save/Load Impact: player.equipment (handled by Equipment System).
 
-Inventory System
-Goal: Manage items the player collects.
-Key Data Structures:
-GameData.items = { [itemId] = { name_key, description_key, icon_key, type="consumable/weapon/armor/quest", stackable=true/false, maxStack=99, slot="head/chest/etc. (if equippable)", effects={ {type="heal", amount=50}, {type="buff", stat="attack", value=5, duration=30} }, price=10 } }
-player.inventory = { {itemId="potion_hp", quantity=5}, {itemId="sword_basic", quantity=1}, nil, ... } (Array representing slots, nil for empty).
-player.inventoryCapacity = 20 (number of slots).
-Core Logic:
-addItemToInventory(itemId, quantity):
-Check for existing stacks of itemId if stackable.
-Find an empty slot if no stack or new item.
-Handle capacity limits. Return true if successful, false otherwise.
-removeItemFromInventory(slotIndex or itemId, quantity):
-Update quantity or set slot to nil.
-useItem(slotIndex):
-Get itemId from player.inventory[slotIndex].
-Check GameData.items[itemId].type.
-If "consumable": Apply effects (e.g., player.hp = math.min(player.maxHp, player.hp + effect.amount)), then removeItemFromInventory.
-If "equippable": Call EquipmentSystem.equipItem(slotIndex).
-UI Components:
-New gameState = "inventoryScreen" (or part of a larger character screen).
-drawInventoryScreen():
-Grid of item slots.
-Draw item icons and quantities from player.inventory and GameData.items.
-Highlight selected item.
-Display item details/tooltip for selected item.
-Buttons for "Use", "Equip", "Drop".
-Integration Points: Equipment System, Loot System, Item Pickup, Trading System, Quest System (for quest items).
-Save/Load Impact: player.inventory.
-
-
 Equipment System
 Goal: Allow player to equip items to enhance stats and potentially change appearance.
 Key Data Structures:
@@ -140,7 +97,6 @@ Allow interaction (click slot to unequip, or drag from inventory).
 Integration Points: Inventory System, Stat Display UI, Combat System.
 Save/Load Impact: player.equipment. player.baseStats if they can change (e.g. from permanent buffs).
 
-
 Item Pickup (Collectible Object)
 Goal: Allow player to collect items found in the game world.
 Key Data Structures:
@@ -156,7 +112,6 @@ Inventory Full: Display message "Inventory full." Item remains.
 UI Components: None directly, but interacts with inventory UI messages.
 Integration Points: Inventory System.
 Save/Load Impact: levelData.collectibleItems.collected status for each item instance.
-
 
 Treasure/Loot System
 Goal: Generate item drops from monsters and chests.
@@ -180,7 +135,6 @@ drawLootWindow(lootItems): Display items from generateLoot.
 Allow player to click "Take All" or individual items.
 Integration Points: Inventory System, Monster System, Room Event Triggers (Chests).
 Save/Load Impact: None directly, but interacts with systems that are saved (inventory).
-
 
 IV. Gameplay Systems - World & NPCs
 Small Monsters for Leveling (Grinding)
@@ -228,7 +182,6 @@ Respawn the monster (reset its HP, position, set lastDefeatedTime = nil).
 Integration Points: Monster defeat logic, exploration game state.
 Save/Load Impact: levelData.monsters.lastDefeatedTime for each monster instance.
 
-
 Room Event Triggers (for explorable levels)
 Goal: Create interactive elements and events within levels.
 Key Data Structures:
@@ -254,7 +207,6 @@ trigger.active = false.
 UI Components: Visuals for traps, chests. Loot window.
 Integration Points: Player movement/collision, Loot System, Dialogue System.
 Save/Load Impact: trigger.isOpen, trigger.active for each trigger instance.
-
 
 NPC Quest and Trading System
 Goal: Allow NPCs to give quests and trade items with the player.
@@ -294,8 +246,6 @@ Dialogue UI extended for quest/trade options.
 Integration Points: Dialogue System, Inventory System, Monster System (for kill quests), Item System.
 Save/Load Impact: player.activeQuests, player.completedQuests, player.gold. NPC stock (if persistent).
 
-
-
 V. User Interface (UI) & User Experience (UX)
 Map Display & Mini-Map (for explorable levels)
 Goal: Provide navigation aids.
@@ -316,16 +266,6 @@ Draw a clipped portion of levelData.mapImage centered on player.
 Draw icons for player, nearby entities.
 UI Components: Full map screen, Mini-map HUD element.
 Save/Load Impact: player.mapFog.
-
-
-Play Status UI (HUD)
-Goal: Consolidate and display essential player stats.
-Core Logic:
-drawHUD() function called in love.draw for relevant game states (battle, exploration).
-Draws HP bar, MP bar, EXP bar, Level text.
-Data comes directly from player table.
-UI Components: The HUD itself.
-Integration Points: player table.
 
 MC’s Statistics Page
 Goal: Show detailed character statistics.
