@@ -26,17 +26,15 @@ This 2D demo is intentionally simplified and **does not include** features plann
 - **Small Monsters for Leveling (Grinding)**  
 - **Respawn System**  
 - **Room Event Triggers**: Events within rooms, such as traps, treasure, or monster encounters.  
-- **Inventory System**  
 - **Equipment System**  
 - **Item Pickup (Collectible Object)**  
 - **Treasure/Loot System**  
 - **NPC Quest and Trading System**  
 - **Map Display**  
 - **Mini-Map**  
-- **Play Status UI**:Current HP, MP, EXP, LV.  MC’s statistics, 
 - **Quest Page** : Show players’ mission
 
-Despite these simplifications, the 2D game codebase already consists of approximately **3600+ lines of code** (V0.01). This provides a tangible reference point for understanding the scale and complexity even of a reduced-scope game and highlights potential challenges in developing a more feature-rich 3D project within our timeframe.
+Despite these simplifications, the 2D game codebase already consists of approximately **5000+ lines of code** (V0.01). This provides a tangible reference point for understanding the scale and complexity even of a reduced-scope game and highlights potential challenges in developing a more feature-rich 3D project within our timeframe.
 
 For more detailed features and information about our current (Jan 2025) plans for the 3D project, please check the [A Hero's Redemption Game Plan](A%20Hero's%20Redemption%20Game%20Plan.pdf)
  file.
