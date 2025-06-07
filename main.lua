@@ -226,6 +226,8 @@ local VALID_GAME_STATES = {
     levelSelect = true,
     aboutPage = true,
     inventoryScreen = true,
+    questLogScreen = true, -- New state
+    statsScreen = true, -- New state
 }
 local VALID_BATTLE_PHASES = {
     select = true,
@@ -246,6 +248,29 @@ local function validateBattlePhase(phase)
     end
     return phase
 end
+
+-- Place this near other game constants or helper tables
+EQUIPPABLE_STATS = {"attack", "defense", "maxHp", "maxMp", "critRate", "critDamage"}
+-- Add other stats like "speed", "magicResist" if they become relevant later
+
+function recalculatePlayerStats()
+    print("[STATS] Recalculating player stats (HP/MP adjustment)...")
+
+    -- Ensure HP/MP consistency after maxHP/maxMP changes.
+    -- The actual stat changes (attack, defense etc.) will be done incrementally
+    -- by equipItem and unequipItem functions.
+
+    if player.maxHp <= 0 then player.maxHp = 1 end -- Prevent division by zero or weird HP
+    player.hp = math.min(player.hp, player.maxHp)
+    player.hp = math.max(0, player.hp) -- Ensure HP isn't negative
+
+    if player.maxMp <= 0 then player.maxMp = 1 end
+    player.mp = math.min(player.mp, player.maxMp)
+    player.mp = math.max(0, player.mp)
+
+    print(string.format("[STATS] Player stats after HP/MP adjustment: HP %d/%d, MP %d/%d", player.hp, player.maxHp, player.mp, player.maxMp))
+end
+
 function transitionGameState(from, to)
     local validatedFrom = validateGameState(from or "menu")
     local validatedTo = validateGameState(to)
@@ -284,11 +309,29 @@ function transitionGameState(from, to)
             end
         end
 
-        if validatedTo == "menu" or validatedTo == "options" or validatedTo == "levelSelect" or validatedTo == "storyPage" or validatedTo == "aboutPage" or validatedTo == "inventoryScreen" then
+        if validatedTo == "menu" or validatedTo == "options" or validatedTo == "levelSelect" or validatedTo == "storyPage" or validatedTo == "aboutPage" or validatedTo == "inventoryScreen" or validatedTo == "questLogScreen" or validatedTo == "statsScreen" then
             if resources.sounds.menuBgm then
                 resources.sounds.menuBgm:setLooping(true)
                 resources.sounds.menuBgm:play()
                 print("[AUDIO] Started Menu BGM.")
+            end
+            if validatedTo == "questLogScreen" then -- Add this block
+                questLogState.currentTab = "active" -- Default to active tab
+                questLogState.selectedQuestIndex = 1
+                questLogState.activeQuestScrollOffset = 0
+                questLogState.completedQuestScrollOffset = 0
+
+                -- Attempt to select the first quest in the active tab
+                local firstActiveQuestId = nil
+                if player.activeQuests then
+                    local tempActiveQuests = {}
+                    for id, _ in pairs(player.activeQuests) do table.insert(tempActiveQuests, {id=id}) end
+                    if #tempActiveQuests > 0 then
+                        table.sort(tempActiveQuests, function(a,b) return a.id < b.id end)
+                        firstActiveQuestId = tempActiveQuests[1].id
+                    end
+                end
+                questLogState.selectedQuestId = firstActiveQuestId
             end
         elseif validatedTo == "battle" then
             if resources.sounds.battleBgm then
@@ -689,8 +732,18 @@ player = {
   isDefending = false,
   status = {},
   combo = 0,
+  activeQuests = {},
+  completedQuests = {},
   inventoryCapacity = 20,
-  inventory = {}
+  inventory = {},
+  equipment = {
+      head = nil,
+      chest = nil,
+      legs = nil,
+      weapon = nil,
+      accessory1 = nil,
+      accessory2 = nil
+  }
 }
 print("[GAME] Player settings initialized (with EXP/MP)")
 for i = 1, player.inventoryCapacity do
@@ -709,10 +762,38 @@ inventoryState = {
     detailsX = 0,
     detailsY = 100,
     uiMessage = "", -- Added for inventory messages
-    uiMessageTimer = 0 -- Added for inventory messages
+    uiMessageTimer = 0, -- Added for inventory messages
+    currentFocus = "inventory", -- "inventory" or "equipment"
+    selectedEquipmentSlotKey = nil, -- e.g., "head", "weapon"
+    equipmentSlotOrder = {"weapon", "head", "chest", "legs", "accessory1", "accessory2"}, -- Define display order
+    equipmentSlotDisplayAreas = {}, -- For drawing and mouse clicks
+    equipmentPanel = { x = 0, y = 0, width = 0, height = 0 } -- Define panel area
 }
 inventoryState.slotRows = math.ceil(player.inventoryCapacity / inventoryState.slotCols)
 inventoryState.detailsX = inventoryState.gridStartX + (inventoryState.slotWidth + inventoryState.slotPadding) * inventoryState.slotCols + 20
+
+questLogState = {
+    currentTab = "active", -- "active" or "completed"
+    selectedQuestId = nil,
+    activeQuestScrollOffset = 0,
+    completedQuestScrollOffset = 0,
+    questsPerPage = 5, -- Example, can be adjusted
+    tabAreas = {}, -- For mouse interaction later
+    questListArea = {}, -- For mouse interaction later
+    detailsArea = {}, -- For layout
+    lineHeight = 0, -- Will be set based on font
+    padding = 10,
+    selectedQuestIndex = 1, -- Index in the current list view
+    navDelayTimer = 0,      -- Timer for input delay
+    navDelay = 0.15        -- Delay between inputs
+}
+
+statsScreenState = {
+    padding = 20,
+    lineHeight = 0, -- Will be set based on font
+    labelColumnWidth = 0, -- For alignment
+    valueColumnX = 0 -- For alignment
+}
 
 enemy = {
   x = 600,
@@ -742,7 +823,10 @@ battleState = {
   },
   currentOption = 1,
   buttonAreas = {},
-  effects = {}
+  effects = {},
+  victoryTriggered = false,
+  defeatTriggered = false,
+  leaveGrindingButtonArea = nil -- Will be defined in drawBattleUI if in grinding mode
 }
 print("[GAME] Battle state initialized")
   uiState = {
@@ -850,6 +934,10 @@ print("[GAME] Battle state initialized")
       {textKey = "menu_options", action = function() transitionGameState(gameState, "options") end, descriptionKey = "menu_options_desc"},
       {textKey = "menu_story_page", action = function() transitionGameState(gameState, "storyPage") end, descriptionKey = "menu_story_page_desc"},
       {textKey = "menu_about", action = function() transitionGameState(gameState, "aboutPage") end, descriptionKey = "menu_about_desc"},
+      -- New Quest Log option:
+      {textKey = "menu_quest_log", action = function() transitionGameState(gameState, "questLogScreen") end, descriptionKey = "menu_quest_log_desc"},
+      -- New Statistics option:
+      {textKey = "menu_statistics", action = function() transitionGameState(gameState, "statsScreen") end, descriptionKey = "menu_statistics_desc"},
       {textKey = "menu_save_game", action = function() saveGame() end, descriptionKey = "menu_save_game_desc"},
       {textKey = "menu_load_game", action = function() loadGame() end, descriptionKey = "menu_load_game_desc"},
       {textKey = "menu_exit", action = function() love.event.quit() end, descriptionKey = "menu_exit_desc"}
@@ -860,11 +948,13 @@ print("[GAME] Battle state initialized")
     buttonAreas = {},
     levelSelect = {
         currentLevel = 1,
-        maxLevel = 10,
+        maxLevel = 10, -- Max regular levels
         navTimer = 0,
         navDelay = 0.6,
         buttonAreas = {},
-        backButtonArea = {}
+        backButtonArea = {},
+        grindingLevelIds = {}, -- To be populated with keys from GameData.grindingLevels
+        selectedGrindingLevelKey = nil -- Stores the key if a grinding level is selected
     }
   }
   print("[GAME] Menu state initialized")
@@ -955,6 +1045,15 @@ print("[GAME] Battle state initialized")
   end
   loadingState = false
   transitionGameState(nil, "menu")
+
+  -- Temporary population for testing -  (This should ideally be done more dynamically)
+  if GameData and GameData.grindingLevels then
+      for id, _ in pairs(GameData.grindingLevels) do
+          table.insert(menuState.levelSelect.grindingLevelIds, id)
+      end
+      -- Sort them if necessary for consistent order
+      table.sort(menuState.levelSelect.grindingLevelIds)
+  end
 end
 TimerSystem = {
     timers = {},
@@ -1087,19 +1186,48 @@ function love.update(dt)
             battleState.messageTimer = battleState.messageTimer - dt
         end
         if enemy.hp <= 0 then
-            local currentEnemyData = enemyData[menuState.levelSelect.currentLevel]
-            if currentEnemyData and currentEnemyData.expReward then
-                grantExp(currentEnemyData.expReward)
+            if not battleState.victoryTriggered then -- Add a flag to prevent multiple triggers
+                grantExp(enemy.expReward or 0) -- Use enemy.expReward, ensure it's populated in restartGame
+                battleState.victoryTriggered = true -- Set flag
+
+                if currentState.isGrinding then
+                    -- Continuous spawning for grinding mode
+                    battleState.message = GameData.getText(currentGameLanguage, "grinding_next_opponent", nil, "Next opponent incoming!") -- Placeholder, add to game_data
+                    battleState.messageTimer = GAME_CONSTANTS.TIMER.ACTION_DELAY
+
+                    TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY + 0.5, function()
+                        if gameState == "battle" and currentState.isGrinding then -- Ensure still in grinding battle
+                            battleState.victoryTriggered = false -- Reset for next enemy
+                            restartGame()
+                            -- Player HP/MP are reset in restartGame() via player settings if desired, or keep current
+                            print("[GRINDING] Spawning next enemy.")
+                        end
+                    end, TIMER_GROUPS.BATTLE)
+                else
+                    -- Regular victory
+                    battleState.phase = "result" -- Keep this for regular mode
+                    TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY + (battleState.messageTimer > 0 and battleState.messageTimer or 0), function()
+                        if gameState == "battle" then -- Check if still in battle before transitioning
+                             transitionGameState(gameState, "victory")
+                        end
+                    end, TIMER_GROUPS.BATTLE)
+                end
             end
-            battleState.phase = "result"
-            TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY + (battleState.messageTimer > 0 and battleState.messageTimer or 0), function()
-                transitionGameState(gameState, "victory")
-            end, TIMER_GROUPS.BATTLE)
         elseif player.hp <= 0 then
-            battleState.phase = "result"
-            TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY + (battleState.messageTimer > 0 and battleState.messageTimer or 0), function()
-                transitionGameState(gameState, "defeat")
-            end, TIMER_GROUPS.BATTLE)
+            if not battleState.defeatTriggered then -- Add a flag
+                battleState.defeatTriggered = true
+                battleState.phase = "result"
+                TimerSystem.create(GAME_CONSTANTS.TIMER.ACTION_DELAY + (battleState.messageTimer > 0 and battleState.messageTimer or 0), function()
+                    if gameState == "battle" then -- Check if still in battle
+                        if currentState.isGrinding then
+                            -- Optional: Handle defeat in grinding differently? For now, same as regular.
+                            -- Player can leave from defeat screen or restart (which would restart grinding if isGrinding is still true)
+                            -- currentState.isGrinding = false; -- Or keep it true if defeat screen has grinding-aware options
+                        end
+                        transitionGameState(gameState, "defeat")
+                    end
+                end, TIMER_GROUPS.BATTLE)
+            end
         end
     elseif gameState == "pause" then
     elseif gameState == "ending" then
@@ -1111,8 +1239,391 @@ function love.update(dt)
         handleAboutPageInput(dt)
     elseif gameState == "inventoryScreen" then
         -- uiMessageTimer is handled globally now
+    elseif gameState == "questLogScreen" then
+        handleQuestLogInput(dt)
+    elseif gameState == "statsScreen" then
+        handleStatsScreenInput(dt)
     end
 end
+
+function drawQuestLogScreen()
+    local windowWidth = love.graphics.getWidth()
+    local windowHeight = love.graphics.getHeight()
+    love.graphics.clear(0.1, 0.1, 0.15, 1) -- Dark background
+
+    local uiFont = resources.fonts.ui or love.graphics.newFont(16)
+    local titleFont = resources.fonts.battle or love.graphics.newFont(24)
+    questLogState.lineHeight = uiFont:getHeight() + 4 -- Add some padding
+
+    -- Title
+    love.graphics.setFont(titleFont)
+    love.graphics.setColor(1, 1, 1)
+    local titleText = GameData.getText(currentGameLanguage, "menu_quest_log") -- Re-use menu title
+    love.graphics.printf(titleText, 0, questLogState.padding, windowWidth, "center")
+
+    -- Tabs
+    love.graphics.setFont(uiFont)
+    local tabY = questLogState.padding * 2 + titleFont:getHeight()
+    local tabHeight = questLogState.lineHeight + questLogState.padding
+    local activeTabText = GameData.getText(currentGameLanguage, "quest_log_active", nil, "Active")
+    local completedTabText = GameData.getText(currentGameLanguage, "quest_log_completed", nil, "Completed")
+
+    local activeTabWidth = uiFont:getWidth(activeTabText) + questLogState.padding * 2
+    local completedTabWidth = uiFont:getWidth(completedTabText) + questLogState.padding * 2
+
+    questLogState.tabAreas.active = { x = questLogState.padding, y = tabY, width = activeTabWidth, height = tabHeight }
+    questLogState.tabAreas.completed = { x = questLogState.padding + activeTabWidth + questLogState.padding, y = tabY, width = completedTabWidth, height = tabHeight }
+
+    -- Draw Active Tab
+    if questLogState.currentTab == "active" then
+        love.graphics.setColor(0.4, 0.4, 0.5) -- Highlight active tab
+    else
+        love.graphics.setColor(0.2, 0.2, 0.3)
+    end
+    love.graphics.rectangle("fill", questLogState.tabAreas.active.x, questLogState.tabAreas.active.y, questLogState.tabAreas.active.width, questLogState.tabAreas.active.height)
+    love.graphics.setColor(1,1,1)
+    love.graphics.printf(activeTabText, questLogState.tabAreas.active.x + questLogState.padding, tabY + questLogState.padding / 2, activeTabWidth - questLogState.padding * 2, "center")
+
+    -- Draw Completed Tab
+    if questLogState.currentTab == "completed" then
+        love.graphics.setColor(0.4, 0.4, 0.5) -- Highlight active tab
+    else
+        love.graphics.setColor(0.2, 0.2, 0.3)
+    end
+    love.graphics.rectangle("fill", questLogState.tabAreas.completed.x, questLogState.tabAreas.completed.y, questLogState.tabAreas.completed.width, questLogState.tabAreas.completed.height)
+    love.graphics.setColor(1,1,1)
+    love.graphics.printf(completedTabText, questLogState.tabAreas.completed.x + questLogState.padding, tabY + questLogState.padding/2, completedTabWidth - questLogState.padding*2, "center")
+
+    -- Quest List Area
+    local listX = questLogState.padding
+    local listY = tabY + tabHeight + questLogState.padding
+    local listWidth = windowWidth * 0.4 - questLogState.padding * 1.5 -- Give some space between list and details
+    local listHeight = windowHeight - listY - questLogState.padding
+    questLogState.questListArea = {x = listX, y = listY, width = listWidth, height = listHeight}
+    love.graphics.setColor(0.2, 0.2, 0.25)
+    love.graphics.rectangle("fill", listX, listY, listWidth, listHeight)
+    love.graphics.setColor(1,1,1)
+
+    local questsToDisplay = {}
+    local currentScrollOffset = 0
+    if questLogState.currentTab == "active" then
+        if player.activeQuests then
+            for id, data in pairs(player.activeQuests) do
+                table.insert(questsToDisplay, {id = id, data = data})
+            end
+        end
+        currentScrollOffset = questLogState.activeQuestScrollOffset
+    else -- "completed"
+        if player.completedQuests then
+            for id, _ in pairs(player.completedQuests) do -- Assuming completedQuests stores IDs as keys
+                 table.insert(questsToDisplay, {id = id, data = GameData.quests[id]}) -- Fetch static data for completed
+            end
+        end
+        currentScrollOffset = questLogState.completedQuestScrollOffset
+    end
+
+    -- Sort quests by ID for consistent order (optional, but good for UI)
+    table.sort(questsToDisplay, function(a,b) return a.id < b.id end)
+
+    love.graphics.setScissor(listX, listY, listWidth, listHeight)
+    for i, questEntry in ipairs(questsToDisplay) do
+        if i > currentScrollOffset and i <= currentScrollOffset + questLogState.questsPerPage then
+            local questDef = GameData.quests[questEntry.id]
+            if questDef then
+                local questName = GameData.getText(currentGameLanguage, questDef.title_key, nil, questEntry.id)
+                local itemY = listY + (i - 1 - currentScrollOffset) * questLogState.lineHeight + questLogState.padding
+
+                if questEntry.id == questLogState.selectedQuestId then
+                    love.graphics.setColor(0.5, 0.5, 0.3) -- Highlight selected
+                    love.graphics.rectangle("fill", listX, itemY - questLogState.padding/2, listWidth, questLogState.lineHeight)
+                    love.graphics.setColor(1,1,0)
+                else
+                    love.graphics.setColor(1,1,1)
+                end
+                love.graphics.print(questName, listX + questLogState.padding, itemY)
+            end
+        end
+    end
+    love.graphics.setScissor()
+    love.graphics.setColor(1,1,1)
+
+
+    -- Quest Details Area
+    local detailsX = listX + listWidth + questLogState.padding
+    local detailsY = listY
+    local detailsWidth = windowWidth - detailsX - questLogState.padding
+    local detailsHeight = listHeight
+    questLogState.detailsArea = {x = detailsX, y = detailsY, width = detailsWidth, height = detailsHeight}
+    love.graphics.setColor(0.25, 0.25, 0.2)
+    love.graphics.rectangle("fill", detailsX, detailsY, detailsWidth, detailsHeight)
+    love.graphics.setColor(1,1,1)
+
+    love.graphics.setScissor(detailsX, detailsY, detailsWidth, detailsHeight)
+    if questLogState.selectedQuestId and GameData.quests[questLogState.selectedQuestId] then
+        local questDef = GameData.quests[questLogState.selectedQuestId]
+        local currentY = detailsY + questLogState.padding
+
+        -- Title
+        love.graphics.setFont(titleFont) -- Use larger font for title
+        local selectedTitle = GameData.getText(currentGameLanguage, questDef.title_key, nil, questLogState.selectedQuestId)
+        love.graphics.printf(selectedTitle, detailsX + questLogState.padding, currentY, detailsWidth - questLogState.padding*2, "left")
+        currentY = currentY + titleFont:getHeight() + questLogState.padding * 2
+        love.graphics.setFont(uiFont) -- Switch back to UI font
+
+        -- Description
+        local description = GameData.getText(currentGameLanguage, questDef.description_key, nil, "No description.")
+        love.graphics.printf(description, detailsX + questLogState.padding, currentY, detailsWidth - questLogState.padding*2, "left")
+        currentY = currentY + uiFont:getHeight(description, detailsWidth - questLogState.padding*2) + questLogState.lineHeight
+
+        -- Objectives
+        love.graphics.setColor(0.8, 0.9, 1)
+        love.graphics.print(GameData.getText(currentGameLanguage, "quest_log_objectives", nil, "Objectives:"), detailsX + questLogState.padding, currentY)
+        currentY = currentY + questLogState.lineHeight
+        love.graphics.setColor(1,1,1)
+
+        if questDef.objectives then
+            for i, obj in ipairs(questDef.objectives) do
+                local progressText = ""
+                if questLogState.currentTab == "active" and player.activeQuests[questLogState.selectedQuestId] and player.activeQuests[questLogState.selectedQuestId].objectives[i] then
+                    local currentProgress = player.activeQuests[questLogState.selectedQuestId].objectives[i].currentProgress or 0
+                    progressText = string.format(" (%d/%d)", currentProgress, obj.requiredCount)
+                elseif questLogState.currentTab == "completed" then
+                    progressText = string.format(" (%d/%d)", obj.requiredCount, obj.requiredCount) -- Show as completed
+                end
+
+                local objectiveText = ""
+                if obj.type == "kill" then
+                    local enemyName = GameData.getText(currentGameLanguage, obj.target_key, nil, obj.target_key)
+                    objectiveText = GameData.getText(currentGameLanguage, "quest_log_obj_kill", {target=enemyName, count=obj.requiredCount}, "- Kill %{count} %{target}") .. progressText
+                elseif obj.type == "collect" then
+                    local itemName = GameData.getText(currentGameLanguage, GameData.items[obj.item_id].name_key, nil, obj.item_id)
+                    objectiveText = GameData.getText(currentGameLanguage, "quest_log_obj_collect", {item=itemName, count=obj.requiredCount}, "- Collect %{count} %{item}") .. progressText
+                else
+                    objectiveText = "- Unknown objective type" .. progressText
+                end
+                love.graphics.printf(objectiveText, detailsX + questLogState.padding * 2, currentY, detailsWidth - questLogState.padding*3, "left")
+                currentY = currentY + uiFont:getHeight(objectiveText, detailsWidth - questLogState.padding*3) + questLogState.padding / 2
+            end
+        end
+        currentY = currentY + questLogState.lineHeight
+
+        -- Rewards
+        love.graphics.setColor(1, 0.9, 0.8)
+        love.graphics.print(GameData.getText(currentGameLanguage, "quest_log_rewards", nil, "Rewards:"), detailsX + questLogState.padding, currentY)
+        currentY = currentY + questLogState.lineHeight
+        love.graphics.setColor(1,1,1)
+
+        if questDef.rewards then
+            if questDef.rewards.exp then
+                love.graphics.print(GameData.getText(currentGameLanguage, "quest_log_reward_exp", {exp = questDef.rewards.exp}, "- %{exp} EXP"), detailsX + questLogState.padding * 2, currentY)
+                currentY = currentY + questLogState.lineHeight
+            end
+            if questDef.rewards.gold then
+                 love.graphics.print(GameData.getText(currentGameLanguage, "quest_log_reward_gold", {gold = questDef.rewards.gold}, "- %{gold} Gold"), detailsX + questLogState.padding * 2, currentY)
+                currentY = currentY + questLogState.lineHeight
+            end
+            if questDef.rewards.items then
+                for _, itemReward in ipairs(questDef.rewards.items) do
+                    local itemName = GameData.getText(currentGameLanguage, GameData.items[itemReward.itemId].name_key, nil, itemReward.itemId)
+                    local itemText = GameData.getText(currentGameLanguage, "quest_log_reward_item", {item=itemName, quantity=itemReward.quantity}, "- %{quantity}x %{item}")
+                    love.graphics.print(itemText, detailsX + questLogState.padding * 2, currentY)
+                    currentY = currentY + questLogState.lineHeight
+                end
+            end
+        end
+
+    else
+        love.graphics.printf(GameData.getText(currentGameLanguage, "quest_log_no_quest_selected", nil, "Select a quest to see details."), detailsX + questLogState.padding, detailsY + questLogState.padding, detailsWidth - questLogState.padding*2, "center")
+    end
+    love.graphics.setScissor()
+
+
+    -- Instructions
+    love.graphics.setFont(uiFont)
+    love.graphics.setColor(0.8, 0.8, 0.8)
+    local instructions = GameData.getText(currentGameLanguage, "quest_log_instructions", nil, "Up/Down: Select Quest | Left/Right: Change Tab | ESC: Back")
+    love.graphics.printf(instructions, 0, windowHeight - questLogState.lineHeight, windowWidth, "center")
+end
+
+function handleQuestLogInput(dt)
+    questLogState.navDelayTimer = questLogState.navDelayTimer + dt
+    if questLogState.navDelayTimer < questLogState.navDelay then
+        return -- Not enough time passed for next input
+    end
+
+    local inputProcessed = false
+    local currentQuestsArray = {}
+    local currentScrollOffset = 0
+    local isCompletedTab = questLogState.currentTab == "completed"
+
+    if questLogState.currentTab == "active" then
+        if player.activeQuests then
+            for id, data in pairs(player.activeQuests) do
+                table.insert(currentQuestsArray, {id = id, data = data})
+            end
+        end
+        currentScrollOffset = questLogState.activeQuestScrollOffset
+    else -- "completed"
+        if player.completedQuests then
+            for id, _ in pairs(player.completedQuests) do
+                table.insert(currentQuestsArray, {id = id, data = GameData.quests[id]})
+            end
+        end
+        currentScrollOffset = questLogState.completedQuestScrollOffset
+    end
+    table.sort(currentQuestsArray, function(a,b) return a.id < b.id end)
+
+    local totalQuestsInCurrentTab = #currentQuestsArray
+
+    if love.keyboard.isDown("up") or love.keyboard.isDown("w") then
+        if totalQuestsInCurrentTab > 0 then
+            questLogState.selectedQuestIndex = questLogState.selectedQuestIndex - 1
+            if questLogState.selectedQuestIndex < 1 then
+                questLogState.selectedQuestIndex = totalQuestsInCurrentTab -- Wrap to bottom
+                if isCompletedTab then
+                    questLogState.completedQuestScrollOffset = math.max(0, totalQuestsInCurrentTab - questLogState.questsPerPage)
+                else
+                    questLogState.activeQuestScrollOffset = math.max(0, totalQuestsInCurrentTab - questLogState.questsPerPage)
+                end
+            end
+            -- Scrolling up
+            if questLogState.selectedQuestIndex <= currentScrollOffset then
+                if isCompletedTab then
+                    questLogState.completedQuestScrollOffset = math.max(0, questLogState.selectedQuestIndex - 1)
+                else
+                    questLogState.activeQuestScrollOffset = math.max(0, questLogState.selectedQuestIndex - 1)
+                end
+            end
+            inputProcessed = true
+        end
+    elseif love.keyboard.isDown("down") or love.keyboard.isDown("s") then
+        if totalQuestsInCurrentTab > 0 then
+            questLogState.selectedQuestIndex = questLogState.selectedQuestIndex + 1
+            if questLogState.selectedQuestIndex > totalQuestsInCurrentTab then
+                questLogState.selectedQuestIndex = 1 -- Wrap to top
+                if isCompletedTab then
+                    questLogState.completedQuestScrollOffset = 0
+                else
+                    questLogState.activeQuestScrollOffset = 0
+                end
+            end
+            -- Scrolling down
+            if questLogState.selectedQuestIndex > currentScrollOffset + questLogState.questsPerPage then
+                 if isCompletedTab then
+                    questLogState.completedQuestScrollOffset = questLogState.selectedQuestIndex - questLogState.questsPerPage
+                else
+                    questLogState.activeQuestScrollOffset = questLogState.selectedQuestIndex - questLogState.questsPerPage
+                end
+            end
+            inputProcessed = true
+        end
+    elseif love.keyboard.isDown("left") or love.keyboard.isDown("a") then
+        if questLogState.currentTab == "completed" then
+            questLogState.currentTab = "active"
+            questLogState.selectedQuestIndex = 1
+            questLogState.activeQuestScrollOffset = 0
+            inputProcessed = true
+        end
+    elseif love.keyboard.isDown("right") or love.keyboard.isDown("d") then
+        if questLogState.currentTab == "active" then
+            questLogState.currentTab = "completed"
+            questLogState.selectedQuestIndex = 1
+            questLogState.completedQuestScrollOffset = 0
+            inputProcessed = true
+        end
+    end
+
+    if inputProcessed then
+        questLogState.navDelayTimer = 0 -- Reset timer
+        if totalQuestsInCurrentTab > 0 and questLogState.selectedQuestIndex >= 1 and questLogState.selectedQuestIndex <= totalQuestsInCurrentTab then
+             questLogState.selectedQuestId = currentQuestsArray[questLogState.selectedQuestIndex].id
+        elseif totalQuestsInCurrentTab == 0 then
+             questLogState.selectedQuestId = nil -- No quests to select
+             questLogState.selectedQuestIndex = 1 -- Reset index
+        else -- Index out of bounds, reset (should ideally not happen with wrapping)
+             questLogState.selectedQuestId = nil
+             questLogState.selectedQuestIndex = 1
+             if isCompletedTab then questLogState.completedQuestScrollOffset = 0 else questLogState.activeQuestScrollOffset = 0 end
+        end
+    end
+end
+
+function drawStatsScreen()
+    local windowWidth = love.graphics.getWidth()
+    local windowHeight = love.graphics.getHeight()
+    love.graphics.clear(0.15, 0.15, 0.1, 1) -- Dark green-ish background
+
+    local uiFont = resources.fonts.ui or love.graphics.newFont(18) -- Ensure a decent size
+    local titleFont = resources.fonts.battle or love.graphics.newFont(28)
+
+    statsScreenState.lineHeight = uiFont:getHeight() + 8 -- Add some padding
+    local currentY = statsScreenState.padding
+
+    -- Title
+    love.graphics.setFont(titleFont)
+    love.graphics.setColor(1, 1, 1)
+    local titleText = GameData.getText(currentGameLanguage, "stats_screen_title", nil, "Player Statistics")
+    love.graphics.printf(titleText, 0, currentY, windowWidth, "center")
+    currentY = currentY + titleFont:getHeight() + statsScreenState.padding * 2
+
+    -- Stats Display
+    love.graphics.setFont(uiFont)
+
+    local statsToDisplay = {
+        {label_key = "stat_label_level", value = player.level},
+        {label_key = "stat_label_exp", value_format = "%s / %s", value = player.exp, value2 = player.expToNextLevel},
+        {label_key = "stat_label_hp", value_format = "%s / %s", value = player.hp, value2 = player.maxHp},
+        {label_key = "stat_label_mp", value_format = "%s / %s", value = player.mp, value2 = player.maxMp},
+        {label_key = "stat_label_attack", value = player.attack},
+        {label_key = "stat_label_defense", value = player.defense},
+        {label_key = "stat_label_crit_rate", value_format = "%s%%", value = player.critRate},
+        {label_key = "stat_label_crit_damage", value_format = "%sx", value = player.critDamage}
+    }
+
+    -- Determine max label width for alignment (simple version)
+    local maxLabelWidth = 0
+    for _, statItem in ipairs(statsToDisplay) do
+        local labelText = GameData.getText(currentGameLanguage, statItem.label_key, nil, statItem.label_key) .. ":"
+        if uiFont:getWidth(labelText) > maxLabelWidth then
+            maxLabelWidth = uiFont:getWidth(labelText)
+        end
+    end
+    statsScreenState.labelColumnWidth = maxLabelWidth + statsScreenState.padding
+    statsScreenState.valueColumnX = statsScreenState.padding + statsScreenState.labelColumnWidth
+
+    -- Draw each statistic
+    for _, statItem in ipairs(statsToDisplay) do
+        love.graphics.setColor(0.8, 0.8, 1) -- Label color
+        local labelText = GameData.getText(currentGameLanguage, statItem.label_key, nil, statItem.label_key) .. ":"
+        love.graphics.print(labelText, statsScreenState.padding + (statsScreenState.labelColumnWidth - uiFont:getWidth(labelText) - statsScreenState.padding), currentY) -- Right align labels
+
+        love.graphics.setColor(1, 1, 1) -- Value color
+        local valueString
+        if statItem.value_format then
+            if statItem.value2 then
+                valueString = string.format(statItem.value_format, tostring(statItem.value), tostring(statItem.value2))
+            else
+                valueString = string.format(statItem.value_format, tostring(statItem.value))
+            end
+        else
+            valueString = tostring(statItem.value)
+        end
+        love.graphics.print(valueString, statsScreenState.valueColumnX, currentY)
+
+        currentY = currentY + statsScreenState.lineHeight
+    end
+
+    -- Instructions
+    love.graphics.setColor(0.8, 0.8, 0.8)
+    local instructions = GameData.getText(currentGameLanguage, "stats_screen_instructions", nil, "Press ESC to go back")
+    love.graphics.printf(instructions, 0, windowHeight - statsScreenState.lineHeight - statsScreenState.padding, windowWidth, "center")
+end
+
+function handleStatsScreenInput(dt)
+    -- Placeholder: Will be implemented if complex input is needed later
+    -- For now, Esc is handled in love.keypressed
+end
+
 function love.draw()
   if loadingState then
     drawLoadingScreen()
@@ -1153,6 +1664,10 @@ function love.draw()
     drawAboutPageUI()
   elseif gameState == "inventoryScreen" then
     drawInventoryScreen()
+  elseif gameState == "questLogScreen" then
+    drawQuestLogScreen()
+  elseif gameState == "statsScreen" then
+    drawStatsScreen()
   end
   love.graphics.pop()
 end
@@ -1231,7 +1746,84 @@ function drawInventoryScreen()
 
     love.graphics.setFont(itemFont)
     love.graphics.setColor(0.8,0.8,0.8)
-    love.graphics.printf("Use Arrow Keys to Navigate, I to Close, Enter to Use", inventoryState.gridStartX, windowHeight - 40, windowWidth - inventoryState.gridStartX*2, "center")
+    -- love.graphics.printf("Use Arrow Keys to Navigate, I to Close, Enter to Use", inventoryState.gridStartX, windowHeight - 40, windowWidth - inventoryState.gridStartX*2, "center")
+
+    -- Equipment Panel Drawing
+    local eqPanelX = inventoryState.detailsX;
+    local eqPanelY = inventoryState.detailsY + 120; -- Position below item details area, adjust as needed
+    local eqPanelWidth = windowWidth - eqPanelX - inventoryState.padding - 20;  -- Align with details area width
+    local eqSlotHeight = (itemFont:getHeight() + 4) * 2;
+    local eqPanelHeight = (#inventoryState.equipmentSlotOrder * eqSlotHeight) + inventoryState.padding * 3 + itemFont:getHeight();
+
+    inventoryState.equipmentPanel = {x = eqPanelX, y = eqPanelY, width = eqPanelWidth, height = eqPanelHeight};
+
+    love.graphics.setColor(0.12, 0.12, 0.18) -- Slightly different background for equipment panel
+    love.graphics.rectangle("fill", eqPanelX, eqPanelY, eqPanelWidth, eqPanelHeight)
+    love.graphics.setColor(1,1,1)
+    love.graphics.rectangle("line", eqPanelX, eqPanelY, eqPanelWidth, eqPanelHeight)
+    love.graphics.setFont(titleFont) -- Use a slightly larger font for the panel title
+    love.graphics.printf(GameData.getText(currentGameLanguage, "inventory_equipped_title", nil, "Equipped"), eqPanelX, eqPanelY + inventoryState.padding / 2, eqPanelWidth, "center")
+    love.graphics.setFont(itemFont) -- Switch back to itemFont for slots
+
+    local currentEqY = eqPanelY + titleFont:getHeight() + inventoryState.padding;
+    inventoryState.equipmentSlotDisplayAreas = {}
+
+    for i, slotKey in ipairs(inventoryState.equipmentSlotOrder) do
+        local slotDisplayName = GameData.getText(currentGameLanguage, "equip_slot_" .. slotKey, nil, slotKey:gsub("^%l", string.upper))
+        local itemInSlotId = player.equipment[slotKey]
+        local itemDisplayName = GameData.getText(currentGameLanguage, "equip_slot_empty", nil, "Empty")
+        if itemInSlotId then
+            local itemData = GameData.items[itemInSlotId]
+            if itemData then
+                itemDisplayName = GameData.getText(currentGameLanguage, itemData.name_key, nil, itemInSlotId)
+            else
+                itemDisplayName = "Unknown Item" -- Should not happen
+            end
+        end
+
+        local displayArea = {x = eqPanelX + inventoryState.padding, y = currentEqY, width = eqPanelWidth - inventoryState.padding*2, height = eqSlotHeight - 4}
+        inventoryState.equipmentSlotDisplayAreas[slotKey] = displayArea
+
+        if inventoryState.currentFocus == "equipment" and inventoryState.selectedEquipmentSlotKey == slotKey then
+            love.graphics.setColor(1,1,0,0.3)
+            love.graphics.rectangle("fill", displayArea.x, displayArea.y, displayArea.width, displayArea.height)
+        end
+
+        love.graphics.setColor(0.8,0.8,1)
+        love.graphics.print(slotDisplayName .. ":", displayArea.x + 5, displayArea.y + 2)
+        love.graphics.setColor(1,1,1)
+        love.graphics.printf(itemDisplayName, displayArea.x + 5, displayArea.y + itemFont:getHeight() + 4, displayArea.width - 10, "left")
+
+        currentEqY = currentEqY + eqSlotHeight
+    end
+
+    love.graphics.setColor(1,1,1) -- Reset color
+
+    -- Modified Prompts
+    local promptText = ""
+    local currentSelectedItem = player.inventory[inventoryState.selectedSlot]
+    if inventoryState.currentFocus == "inventory" and currentSelectedItem then
+        local itemData = GameData.items[currentSelectedItem.itemId]
+        if itemData and itemData.type == "equipment" then
+            promptText = GameData.getText(currentGameLanguage, "prompt_equip", nil, "Enter to Equip (Tab to switch focus)")
+        elseif itemData and itemData.type == "consumable" then
+            promptText = GameData.getText(currentGameLanguage, "prompt_use", nil, "Enter to Use (Tab to switch focus)")
+        else
+             promptText = GameData.getText(currentGameLanguage, "prompt_inventory_actions", nil, "I to Close (Tab to switch focus)")
+        end
+    elseif inventoryState.currentFocus == "equipment" then
+        if inventoryState.selectedEquipmentSlotKey and player.equipment[inventoryState.selectedEquipmentSlotKey] then
+            promptText = GameData.getText(currentGameLanguage, "prompt_unequip", nil, "Enter to Unequip (Tab to switch focus)")
+        else
+            promptText = GameData.getText(currentGameLanguage, "prompt_equipment_actions", nil, "I to Close (Tab to switch focus)")
+        end
+    else -- Default prompt if nothing specific
+        promptText = GameData.getText(currentGameLanguage, "prompt_general_inventory", nil, "I to Close (Tab to switch focus)")
+    end
+
+    love.graphics.setFont(itemFont)
+    love.graphics.setColor(0.8,0.8,0.8)
+    love.graphics.printf(promptText, inventoryState.gridStartX, windowHeight - 40, windowWidth - inventoryState.gridStartX*2, "center")
 end
 
 local uiLayoutConfig = {
@@ -1335,9 +1927,36 @@ function drawLevelSelect()
           love.graphics.setColor(1, 1, 1)
       end
       local text = GameData.getText(currentGameLanguage, "level_number", {level = i})
-      local textWidth = fontUI:getWidth(text)
-      love.graphics.print(text, buttonRect.x, buttonRect.y)
+      -- local textWidth = fontUI:getWidth(text) -- Not needed if width is fixed
+      love.graphics.print(text, buttonRect.x + 10, buttonRect.y + 5) -- Add some padding
   end
+
+  local totalRegularLevels = menuState.levelSelect.maxLevel
+  local grindingLevelBaseIndex = totalRegularLevels + 1
+
+  for i, grindingId in ipairs(menuState.levelSelect.grindingLevelIds) do
+      local levelY = 150 + (totalRegularLevels + i - 1) * 40 -- Continue Y position
+      local grindingLevelData = GameData.grindingLevels[grindingId]
+      local text = GameData.getText(currentGameLanguage, grindingLevelData.name_key, nil, grindingId)
+
+      local buttonRect = {
+          x = windowWidth / 2 - (fontUI:getWidth(text) / 2) - 10, -- Centered text with padding
+          y = levelY,
+          width = fontUI:getWidth(text) + 20, -- Dynamic width with padding
+          height = 30
+      }
+      menuState.levelSelect.buttonAreas[grindingLevelBaseIndex + i - 1] = buttonRect
+
+      if menuState.levelSelect.currentLevel == (grindingLevelBaseIndex + i - 1) then -- Check if this grinding level is selected
+          love.graphics.setColor(1, 1, 0) -- Highlight color
+          love.graphics.rectangle("line", buttonRect.x, buttonRect.y, buttonRect.width, buttonRect.height)
+          -- menuState.levelSelect.selectedGrindingLevelKey = grindingId -- This should be set on input, not draw
+      else
+          love.graphics.setColor(1, 1, 1)
+      }
+      love.graphics.print(text, buttonRect.x + 10, buttonRect.y + 5)
+  end
+
   local backButtonRect = {
     x = 10,
     y = 10,
@@ -1606,10 +2225,27 @@ function drawCharacters()
   local playerDrawY = positions.player.y - (playerImage:getHeight() * playerScale) / 2
   love.graphics.draw(playerImage, playerDrawX, playerDrawY, 0, playerScale, playerScale)
 
-  local currentEnemyData = enemyData[menuState.levelSelect.currentLevel]
-  local enemyImageKey = animations.enemy.current == "attack" and (currentEnemyData.attackImage or currentEnemyData.image) or currentEnemyData.image
-  local enemyImage = resources.images[enemyImageKey] or resources.images.enemyDemonKing
+  -- Use stored keys in enemy object, which are populated by restartGame
+  local enemyStandImageKey = enemy.image -- This is already the image object from resources.images
+  local enemyAttackImageActualKey = enemy.attackImageKey -- This is the string key
 
+  local currentEnemySprite
+  if animations.enemy.current == "attack" then
+    if enemyAttackImageActualKey and resources.images[enemyAttackImageActualKey] then
+      currentEnemySprite = resources.images[enemyAttackImageActualKey]
+    else
+      currentEnemySprite = enemyStandImage -- Fallback to stand image if attack image is missing
+    end
+  else
+    currentEnemySprite = enemyStandImage
+  end
+
+  if not currentEnemySprite then
+      print("[ERROR] Enemy sprite is nil in drawCharacters. Fallback.")
+      currentEnemySprite = resources.images.enemyDemonKing -- Absolute fallback
+  end
+
+  local enemyImage = currentEnemySprite
   local enemyScaleX = positions.enemy.maxWidth / enemyImage:getWidth()
   local enemyScaleY = positions.enemy.maxHeight / enemyImage:getHeight()
   local enemyScale = math.min(enemyScaleX, enemyScaleY)
@@ -1694,8 +2330,8 @@ function drawBattleUI()
   local enemyHpText = string.format("HP: %d / %d", math.floor(enemy.hp), math.floor(enemy.maxHp))
   local enemyHpTextWidth = fontUI:getWidth(enemyHpText)
   love.graphics.print(enemyHpText, enemyHpX + hpBarWidth / 2 - enemyHpTextWidth / 2, enemyHpY + hpBarHeight + 5)
-  local currentEnemyData = enemyData[menuState.levelSelect.currentLevel]
-  local enemyName = GameData.getText(currentGameLanguage, currentEnemyData.displayNameKey)
+  -- Use stored displayNameKey from enemy object
+  local enemyName = GameData.getText(currentGameLanguage, enemy.displayNameKey, nil, "Unknown Enemy")
   local enemyNameWidth = fontUI:getWidth(enemyName)
   love.graphics.print(enemyName, enemyHpX + hpBarWidth / 2 - enemyNameWidth / 2, enemyHpY - fontUI:getHeight() - 5)
 
@@ -1779,6 +2415,29 @@ function drawBattleUI()
         love.graphics.setColor(1, 0.5, 0.5)
       end
     end
+  end
+
+  -- Draw "Leave Training" button if in grinding mode
+  if currentState.isGrinding then
+      local buttonWidth = 150
+      local buttonHeight = 40
+      local buttonX = windowWidth - buttonWidth - 20 -- Position it e.g., top-right or bottom-right
+      local buttonY = windowHeight * 0.1 -- Example: near top-right below enemy HP
+
+      battleState.leaveGrindingButtonArea = {x = buttonX, y = buttonY, width = buttonWidth, height = buttonHeight}
+
+      love.graphics.setFont(fontUI) -- Ensure uiFont (fontUI) is active
+      local text = GameData.getText(currentGameLanguage, "battle_action_leave_grinding", nil, "Leave Training") -- Key to be added
+      local textWidth = fontUI:getWidth(text)
+
+      -- Simple button drawing
+      love.graphics.setColor(0.7, 0.2, 0.2, 0.8) -- Reddish button
+      love.graphics.rectangle("fill", buttonX, buttonY, buttonWidth, buttonHeight)
+      love.graphics.setColor(1,1,1)
+      love.graphics.rectangle("line", buttonX, buttonY, buttonWidth, buttonHeight)
+      love.graphics.printf(text, buttonX + (buttonWidth - textWidth)/2, buttonY + (buttonHeight - fontUI:getHeight())/2, buttonWidth, "center")
+  else
+      battleState.leaveGrindingButtonArea = nil -- Ensure it's nil when not grinding
   end
 end
 function drawEffects()
@@ -1961,19 +2620,27 @@ function handleLevelSelectInput(dt)
   local moved = false
   local prevLevel = menuState.levelSelect.currentLevel
   menuState.levelSelect.navTimer = menuState.levelSelect.navTimer + dt
+  local totalOptions = menuState.levelSelect.maxLevel + #menuState.levelSelect.grindingLevelIds
+
   if  menuState.levelSelect.navTimer >  menuState.levelSelect.navDelay then
     if love.keyboard.isDown("up") or love.keyboard.isDown("w") then
       menuState.levelSelect.currentLevel = math.max(1, menuState.levelSelect.currentLevel - 1)
       moved = true
       menuState.levelSelect.navTimer = 0
     elseif love.keyboard.isDown("down") or love.keyboard.isDown("s") then
-      menuState.levelSelect.currentLevel = math.min(menuState.levelSelect.maxLevel, menuState.levelSelect.currentLevel + 1)
+      menuState.levelSelect.currentLevel = math.min(totalOptions, menuState.levelSelect.currentLevel + 1)
       moved = true
       menuState.levelSelect.navTimer = 0
     end
   end
   if moved and menuState.levelSelect.currentLevel ~= prevLevel then
-    print("[LEVEL SELECT] Level selected: " .. menuState.levelSelect.currentLevel)
+    if menuState.levelSelect.currentLevel > menuState.levelSelect.maxLevel then
+        local grindingIndex = menuState.levelSelect.currentLevel - menuState.levelSelect.maxLevel
+        menuState.levelSelect.selectedGrindingLevelKey = menuState.levelSelect.grindingLevelIds[grindingIndex]
+    else
+        menuState.levelSelect.selectedGrindingLevelKey = nil
+    end
+    print("[LEVEL SELECT] Level selected: " .. menuState.levelSelect.currentLevel .. " Grinding Key: " .. tostring(menuState.levelSelect.selectedGrindingLevelKey))
   end
 end
 local storyEnterTimer = 0
@@ -2158,18 +2825,51 @@ function love.keypressed(key)
       option.action()
     end
   elseif gameState == "levelSelect" then
+    local totalOptions = menuState.levelSelect.maxLevel + #menuState.levelSelect.grindingLevelIds
     if key == "return" then
-        print("[LEVEL SELECT] Level " .. menuState.levelSelect.currentLevel .. " selected")
-        GameData.startLevelDialogue(menuState.levelSelect.currentLevel)
-        transitionGameState(gameState, "story")
+        local selectedIdx = menuState.levelSelect.currentLevel
+        if selectedIdx >= 1 and selectedIdx <= menuState.levelSelect.maxLevel then
+            -- Regular level selected
+            currentState.isGrinding = false -- Ensure this is reset
+            GameData.startLevelDialogue(selectedIdx)
+            transitionGameState(gameState, "story")
+            print("[LEVEL SELECT] Regular Level " .. selectedIdx .. " selected")
+        elseif selectedIdx > menuState.levelSelect.maxLevel and selectedIdx <= totalOptions then
+            -- Grinding level selected
+            local grindingIndex = selectedIdx - menuState.levelSelect.maxLevel
+            local grindingId = menuState.levelSelect.grindingLevelIds[grindingIndex]
+            if grindingId then
+                currentState.isGrinding = true
+                currentState.currentGrindingLevelId = grindingId
+                menuState.levelSelect.selectedGrindingLevelKey = grindingId -- Ensure this is set
+                print("[LEVEL SELECT] Grinding Level " .. grindingId .. " selected. isGrinding: " .. tostring(currentState.isGrinding))
+                -- No dialogue for grinding, directly to battle
+                restartGame()
+                transitionGameState(gameState, "battle")
+            else
+                print("[LEVEL SELECT] Error: Could not find grindingId for index: " .. grindingIndex)
+            end
+        else
+            print("[LEVEL SELECT] Error: selectedIdx out of bounds: " .. selectedIdx)
+        end
     elseif key == "escape" then
       transitionGameState(gameState, "menu")
     elseif key == "up" or key == "w" then
       menuState.levelSelect.currentLevel = math.max(1, menuState.levelSelect.currentLevel - 1)
-      print("[LEVEL SELECT] Level selected: " .. menuState.levelSelect.currentLevel)
+      if menuState.levelSelect.currentLevel > menuState.levelSelect.maxLevel and menuState.levelSelect.currentLevel <= totalOptions then
+           menuState.levelSelect.selectedGrindingLevelKey = menuState.levelSelect.grindingLevelIds[menuState.levelSelect.currentLevel - menuState.levelSelect.maxLevel]
+      else
+           menuState.levelSelect.selectedGrindingLevelKey = nil
+      end
+      print("[LEVEL SELECT] Level selected: " .. menuState.levelSelect.currentLevel .. " Grinding Key: " .. tostring(menuState.levelSelect.selectedGrindingLevelKey))
     elseif key == "down" or key == "s" then
-      menuState.levelSelect.currentLevel = math.min(menuState.levelSelect.maxLevel, menuState.levelSelect.currentLevel + 1)
-      print("[LEVEL SELECT] Level selected: " .. menuState.levelSelect.currentLevel)
+      menuState.levelSelect.currentLevel = math.min(totalOptions, menuState.levelSelect.currentLevel + 1)
+      if menuState.levelSelect.currentLevel > menuState.levelSelect.maxLevel and menuState.levelSelect.currentLevel <= totalOptions then
+           menuState.levelSelect.selectedGrindingLevelKey = menuState.levelSelect.grindingLevelIds[menuState.levelSelect.currentLevel - menuState.levelSelect.maxLevel]
+      else
+           menuState.levelSelect.selectedGrindingLevelKey = nil
+      end
+      print("[LEVEL SELECT] Level selected: " .. menuState.levelSelect.currentLevel .. " Grinding Key: " .. tostring(menuState.levelSelect.selectedGrindingLevelKey))
     end
   elseif gameState == "story" then
     if key == "return" then
@@ -2207,7 +2907,9 @@ function love.keypressed(key)
         end
       end
     elseif key == "escape" then
-        handleBattlePause() 
+        handleBattlePause()
+    elseif key == "x" and currentState.isGrinding then -- New hotkey 'x' for exiting grind
+        exitGrindingMode()
     end
   elseif gameState == "pause" then 
       if key == "up" or key == "w" then
@@ -2277,39 +2979,131 @@ function love.keypressed(key)
       print("[GAME STATE] Game state changed to 'menu' from aboutPage")
     end
   elseif gameState == "inventoryScreen" then
-    if key == "up" then
-        inventoryState.selectedSlot = inventoryState.selectedSlot - inventoryState.slotCols
-    elseif key == "down" then
-        inventoryState.selectedSlot = inventoryState.selectedSlot + inventoryState.slotCols
-    elseif key == "left" then
-        inventoryState.selectedSlot = inventoryState.selectedSlot - 1
-    elseif key == "right" then
-        inventoryState.selectedSlot = inventoryState.selectedSlot + 1
-    elseif key == "return" or key == "space" then
-        local itemInSlot = player.inventory[inventoryState.selectedSlot]
-        if itemInSlot then
-            useItem(inventoryState.selectedSlot)
+        if key == "tab" then
+            if inventoryState.currentFocus == "inventory" then
+                inventoryState.currentFocus = "equipment"
+                inventoryState.selectedEquipmentSlotKey = inventoryState.equipmentSlotOrder[1]
+            else
+                inventoryState.currentFocus = "inventory"
+            end
+        elseif inventoryState.currentFocus == "inventory" then
+            if key == "up" then
+                inventoryState.selectedSlot = inventoryState.selectedSlot - inventoryState.slotCols
+            elseif key == "down" then
+                inventoryState.selectedSlot = inventoryState.selectedSlot + inventoryState.slotCols
+            elseif key == "left" then
+                inventoryState.selectedSlot = inventoryState.selectedSlot - 1
+            elseif key == "right" then
+                inventoryState.selectedSlot = inventoryState.selectedSlot + 1
+            elseif key == "return" or key == "space" then
+                local itemInSlot = player.inventory[inventoryState.selectedSlot]
+                if itemInSlot then
+                    local itemData = GameData.items[itemInSlot.itemId]
+                    if itemData and itemData.type == "equipment" then
+                        equipItem(inventoryState.selectedSlot)
+                    elseif itemData and itemData.type == "consumable" then
+                        useItem(inventoryState.selectedSlot)
+                    end
+                end
+            end
+            -- Clamp selectedSlot for inventory
+            if inventoryState.selectedSlot < 1 then
+                inventoryState.selectedSlot = inventoryState.selectedSlot + player.inventoryCapacity -- Wrap to bottom
+            elseif inventoryState.selectedSlot > player.inventoryCapacity then
+                inventoryState.selectedSlot = inventoryState.selectedSlot - player.inventoryCapacity -- Wrap to top
+            end
+
+        elseif inventoryState.currentFocus == "equipment" then
+            local currentIdx = -1
+            for i, slotKey in ipairs(inventoryState.equipmentSlotOrder) do
+                if slotKey == inventoryState.selectedEquipmentSlotKey then
+                    currentIdx = i
+                    break
+                end
+            end
+
+            if key == "up" or key == "w" then
+                if currentIdx > 1 then
+                    inventoryState.selectedEquipmentSlotKey = inventoryState.equipmentSlotOrder[currentIdx - 1]
+                else -- Wrap to bottom
+                    inventoryState.selectedEquipmentSlotKey = inventoryState.equipmentSlotOrder[#inventoryState.equipmentSlotOrder]
+                end
+            elseif key == "down" or key == "s" then
+                if currentIdx < #inventoryState.equipmentSlotOrder and currentIdx ~= -1 then
+                    inventoryState.selectedEquipmentSlotKey = inventoryState.equipmentSlotOrder[currentIdx + 1]
+                else -- Wrap to top or select first if none selected
+                    inventoryState.selectedEquipmentSlotKey = inventoryState.equipmentSlotOrder[1]
+                end
+            elseif key == "return" or key == "space" then
+                if inventoryState.selectedEquipmentSlotKey and player.equipment[inventoryState.selectedEquipmentSlotKey] then
+                    unequipItem(inventoryState.selectedEquipmentSlotKey)
+                end
+            end
+        end
+
+        -- Escape key to close inventory (applies to both focus states)
+        if key == "escape" or key == "i" then
+            if previousGameState then
+                transitionGameState(gameState, previousGameState)
+                previousGameState = nil
+            else
+                transitionGameState(gameState, "menu")
+            end
+        end
+    elseif gameState == "questLogScreen" then
+        if key == "escape" then
+            if previousGameState then
+                transitionGameState(gameState, previousGameState)
+                previousGameState = nil
+            else
+                transitionGameState(gameState, "menu")
+            end
+        end
+    elseif gameState == "statsScreen" then
+        if key == "escape" then
+            if previousGameState then
+                transitionGameState(gameState, previousGameState)
+                previousGameState = nil
+            else
+                transitionGameState(gameState, "menu")
+            end
         end
     end
-    -- Clamp selectedSlot to be within bounds
-    if inventoryState.selectedSlot < 1 then
-        inventoryState.selectedSlot = 1
-    elseif inventoryState.selectedSlot > player.inventoryCapacity then
-        inventoryState.selectedSlot = player.inventoryCapacity
+
+  if key == "i" then -- Hotkey to open/close inventory
+    if gameState == "inventoryScreen" then
+      -- This is now handled by the escape key logic within inventoryScreen block
+    elseif gameState == "battle" or gameState == "menu" or gameState == "questLogScreen" or gameState == "statsScreen" then
+      previousGameState = gameState
+      transitionGameState(gameState, "inventoryScreen")
     end
   end
 
-  if key == "i" then
-    if gameState == "inventoryScreen" then
-      if previousGameState then
-        transitionGameState(gameState, previousGameState)
-        previousGameState = nil
-      else
-        transitionGameState(gameState, "menu")
-      end
-    elseif gameState == "battle" or gameState == "menu" then
-      previousGameState = gameState
-      transitionGameState(gameState, "inventoryScreen")
+  if key == "j" then
+    if gameState == "questLogScreen" then
+        if previousGameState then
+            transitionGameState(gameState, previousGameState)
+            previousGameState = nil -- Clear it after use
+        else
+            transitionGameState(gameState, "menu") -- Fallback to menu
+        end
+    elseif gameState == "menu" or gameState == "battle" or gameState == "options" or gameState == "levelSelect" or gameState == "storyPage" or gameState == "aboutPage" or gameState == "inventoryScreen" then -- Ensure inventoryScreen is also a valid state to open questlog from
+        previousGameState = gameState -- Store current state
+        transitionGameState(gameState, "questLogScreen")
+    end
+  end
+
+  if key == "c" then
+    if gameState == "statsScreen" then
+        if previousGameState then
+            transitionGameState(gameState, previousGameState)
+            previousGameState = nil
+        else
+            transitionGameState(gameState, "menu")
+        end
+    elseif gameState == "menu" or gameState == "battle" or gameState == "options" or gameState == "levelSelect" or gameState == "storyPage" or gameState == "aboutPage" or gameState == "inventoryScreen" or gameState == "questLogScreen" then -- States from which it can be opened
+        previousGameState = gameState
+        transitionGameState(gameState, "statsScreen")
     end
   end
 
@@ -2353,6 +3147,14 @@ local function isPointInRect(x, y, rect)
     return x >= rect.x and x <= rect.x + rect.width and
            y >= rect.y and y <= rect.y + rect.height
 end
+
+function isInArray(array, value)
+    for _, v in ipairs(array) do
+        if v == value then return true end
+    end
+    return false
+end
+
 function love.mousepressed(x, y, button, istouch, presses)
     if button ~= 1 then return end
     local handled = false
@@ -2370,18 +3172,84 @@ function love.mousepressed(x, y, button, istouch, presses)
             end
         end
     elseif gameState == "levelSelect" then
+        local totalOptions = menuState.levelSelect.maxLevel + #menuState.levelSelect.grindingLevelIds
         if menuState.levelSelect.buttonAreas then
-            for i, buttonRect in ipairs(menuState.levelSelect.buttonAreas) do
-                if isPointInRect(x, y, buttonRect) then
-                    menuState.levelSelect.currentLevel = i
-                    print("[LEVEL SELECT] Level " .. menuState.levelSelect.currentLevel .. " selected by mouse")
-                    GameData.startLevelDialogue(menuState.levelSelect.currentLevel)
-                    transitionGameState(gameState, "story")
+            for i = 1, totalOptions do -- Iterate through all possible buttons
+                local buttonRect = menuState.levelSelect.buttonAreas[i]
+                if buttonRect and isPointInRect(x, y, buttonRect) then
+                    menuState.levelSelect.currentLevel = i -- Set currentLevel to the actual index
+
+                    if i >= 1 and i <= menuState.levelSelect.maxLevel then
+                        -- Regular level selected
+                        currentState.isGrinding = false
+                        menuState.levelSelect.selectedGrindingLevelKey = nil
+                        print("[LEVEL SELECT] Regular Level " .. i .. " selected by mouse")
+                        GameData.startLevelDialogue(i)
+                        transitionGameState(gameState, "story")
+                    elseif i > menuState.levelSelect.maxLevel and i <= totalOptions then
+                        -- Grinding level selected
+                        local grindingIndex = i - menuState.levelSelect.maxLevel
+                        local grindingId = menuState.levelSelect.grindingLevelIds[grindingIndex]
+                        if grindingId then
+                            currentState.isGrinding = true
+                            currentState.currentGrindingLevelId = grindingId
+                            menuState.levelSelect.selectedGrindingLevelKey = grindingId
+                            print("[LEVEL SELECT] Grinding Level " .. grindingId .. " selected by mouse. isGrinding: " .. tostring(currentState.isGrinding))
+                            restartGame()
+                            transitionGameState(gameState, "battle")
+                        end
+                    end
                     handled = true
                     break
                 end
             end
         end
+
+        -- Mouse interaction for equipment slots
+        if inventoryState.equipmentSlotDisplayAreas then
+            for slotKey, area in pairs(inventoryState.equipmentSlotDisplayAreas) do
+                if isPointInRect(x, y, area) then
+                    if inventoryState.currentFocus == "equipment" and inventoryState.selectedEquipmentSlotKey == slotKey and player.equipment[slotKey] then
+                        unequipItem(slotKey) -- Double-click/second click on selected equipped item
+                    else
+                        inventoryState.currentFocus = "equipment"
+                        inventoryState.selectedEquipmentSlotKey = slotKey
+                    end
+                    handled = true
+                    break
+                end
+            end
+        end
+
+        -- Mouse interaction for inventory grid (modified for equip on second click)
+        if not handled then -- Only if not handled by equipment panel
+            for i = 1, player.inventoryCapacity do
+                local row = math.floor((i - 1) / inventoryState.slotCols)
+                local col = (i - 1) % inventoryState.slotCols
+                local itemX = inventoryState.gridStartX + col * (inventoryState.slotWidth + inventoryState.slotPadding)
+                local itemY = inventoryState.gridStartY + row * (inventoryState.slotHeight + inventoryState.slotPadding)
+                local area = {x = itemX, y = itemY, width = inventoryState.slotWidth, height = inventoryState.slotHeight}
+
+                if isPointInRect(x, y, area) then
+                    local itemInSlot = player.inventory[i]
+                    if inventoryState.currentFocus == "inventory" and inventoryState.selectedSlot == i and itemInSlot then
+                        -- This is a second click on an already selected inventory item
+                        local itemData = GameData.items[itemInSlot.itemId]
+                        if itemData and itemData.type == "equipment" then
+                            equipItem(i)
+                        elseif itemData and itemData.type == "consumable" then
+                            useItem(i) -- Existing logic
+                        end
+                    else
+                        inventoryState.currentFocus = "inventory"
+                        inventoryState.selectedSlot = i
+                    end
+                    handled = true
+                    break
+                end
+            end
+        end
+
         if menuState.levelSelect.backButtonArea then
           local backButtonRect = menuState.levelSelect.backButtonArea
           if isPointInRect(x, y, backButtonRect) then
@@ -2410,6 +3278,10 @@ function love.mousepressed(x, y, button, istouch, presses)
                     break
                 end
             end
+        end
+        if currentState.isGrinding and battleState.leaveGrindingButtonArea and isPointInRect(x, y, battleState.leaveGrindingButtonArea) then
+            exitGrindingMode()
+            handled = true -- Assuming 'handled' variable is used to prevent other clicks
         end
     elseif gameState == "pause" then
         if pauseState.buttonAreas then
@@ -2606,27 +3478,72 @@ player.mp = player.maxMp
 player.isDefending = false
 player.combo = 0
 print("[GAME] Player settings reset")
-local currentEnemyData = enemyData[menuState.levelSelect.currentLevel]
-if not currentEnemyData then
-    print("[ERROR] Failed to load enemy data for level: " .. tostring(menuState.levelSelect.currentLevel))
-    return
+
+local currentEnemyDefinition
+local enemyDisplayNameKey
+local enemyImageKey
+local enemyAttackImageKey -- To store the specific attack image key
+
+if currentState.isGrinding and currentState.currentGrindingLevelId then
+    print("[GAME] Setting up grinding level: " .. currentState.currentGrindingLevelId)
+    local grindingLevelData = GameData.grindingLevels[currentState.currentGrindingLevelId]
+    if not grindingLevelData then
+        print("[ERROR] Failed to load grinding level data for ID: " .. currentState.currentGrindingLevelId)
+        -- Fallback to a default or handle error appropriately
+        return
+    end
+    if not grindingLevelData.enemyPool or #grindingLevelData.enemyPool == 0 then
+        print("[ERROR] Grinding level " .. currentState.currentGrindingLevelId .. " has an empty or undefined enemyPool.")
+        -- Fallback or error
+        return
+    end
+    local randomEnemyKey = grindingLevelData.enemyPool[math.random(#grindingLevelData.enemyPool)]
+    currentEnemyDefinition = enemyData[randomEnemyKey]
+    if not currentEnemyDefinition then
+        print("[ERROR] Failed to load enemy data for key: " .. randomEnemyKey .. " from grinding pool.")
+        return
+    end
+    enemyImageKey = currentEnemyDefinition.image
+    enemyAttackImageKey = currentEnemyDefinition.attackImage or currentEnemyDefinition.image -- Fallback for attack image
+    enemyDisplayNameKey = currentEnemyDefinition.displayNameKey
+    print("[GAME] Selected enemy for grinding: " .. randomEnemyKey .. " (Image: " .. enemyImageKey .. ", AttackImage: " .. (enemyAttackImageKey or "N/A") .. ")")
+else
+    print("[GAME] Setting up regular level: " .. menuState.levelSelect.currentLevel)
+    currentEnemyDefinition = enemyData[menuState.levelSelect.currentLevel]
+    if not currentEnemyDefinition then
+        print("[ERROR] Failed to load enemy data for regular level: " .. tostring(menuState.levelSelect.currentLevel))
+        return
+    end
+    enemyImageKey = currentEnemyDefinition.image
+    enemyAttackImageKey = currentEnemyDefinition.attackImage or currentEnemyDefinition.image
+    enemyDisplayNameKey = currentEnemyDefinition.displayNameKey
+    print("[GAME] Enemy for regular level " .. menuState.levelSelect.currentLevel .. ": Image: " .. enemyImageKey .. ", AttackImage: " .. (enemyAttackImageKey or "N/A"))
 end
+
 enemy = {
   x = positions.enemy.x,
   y = positions.enemy.y,
-  image = resources.images[currentEnemyData.image],
-  hp = validateNumber(currentEnemyData.hp, GAME_CONSTANTS.HP.MIN, GAME_CONSTANTS.HP.MAX, GAME_CONSTANTS.HP.BASE),
-  maxHp = validateNumber(currentEnemyData.maxHp, GAME_CONSTANTS.HP.MIN, GAME_CONSTANTS.HP.MAX, GAME_CONSTANTS.HP.BASE),
-  attack = validateNumber(currentEnemyData.attack, 1, math.huge, 10),
-  defense = validateNumber(currentEnemyData.defense, 0, math.huge, 5),
-  critRate = validateNumber(currentEnemyData.critRate, 0, GAME_CONSTANTS.MAX_CRIT_RATE, GAME_CONSTANTS.BASE_CRIT_RATE),
-  critDamage = validateNumber(currentEnemyData.critDamage, 1, GAME_CONSTANTS.MAX_CRIT_DAMAGE, GAME_CONSTANTS.BASE_CRIT_DAMAGE),
+  image = resources.images[enemyImageKey],
+  hp = validateNumber(currentEnemyDefinition.hp, GAME_CONSTANTS.HP.MIN, GAME_CONSTANTS.HP.MAX, GAME_CONSTANTS.HP.BASE),
+  maxHp = validateNumber(currentEnemyDefinition.maxHp, GAME_CONSTANTS.HP.MIN, GAME_CONSTANTS.HP.MAX, GAME_CONSTANTS.HP.BASE),
+  attack = validateNumber(currentEnemyDefinition.attack, 1, math.huge, 10),
+  defense = validateNumber(currentEnemyDefinition.defense, 0, math.huge, 5),
+  critRate = validateNumber(currentEnemyDefinition.critRate, 0, GAME_CONSTANTS.MAX_CRIT_RATE, GAME_CONSTANTS.BASE_CRIT_RATE),
+  critDamage = validateNumber(currentEnemyDefinition.critDamage, 1, GAME_CONSTANTS.MAX_CRIT_DAMAGE, GAME_CONSTANTS.BASE_CRIT_DAMAGE),
   isDefending = false,
   status = {},
-  combo = 0
+  combo = 0,
+  displayNameKey = enemyDisplayNameKey,
+  attackImageKey = enemyAttackImageKey -- Store the actual key for attack animation
 }
-print("[GAME] Enemy settings loaded for level " .. menuState.levelSelect.currentLevel)
-  battleState = {
+
+if currentState.isGrinding then
+    print("[GAME] Enemy settings loaded for grinding level " .. currentState.currentGrindingLevelId)
+else
+    print("[GAME] Enemy settings loaded for regular level " .. menuState.levelSelect.currentLevel)
+end
+
+battleState = {
       phase = "select",
       turn = "player",
       message = GameData.getText(currentGameLanguage, "battle_start"),
@@ -2639,7 +3556,10 @@ print("[GAME] Enemy settings loaded for level " .. menuState.levelSelect.current
       },
       currentOption = 1,
       buttonAreas = {},
-      effects = {}
+      effects = {},
+      victoryTriggered = false,
+      defeatTriggered = false,
+      leaveGrindingButtonArea = nil
   }
   for _, skill in pairs(skillSystem) do
     skill.cooldown = 0
@@ -2910,6 +3830,128 @@ function useItem(slotIndex)
     end
 end
 -- End Inventory Management Functions
+
+function equipItem(inventorySlotIndex)
+    if not inventorySlotIndex or not player.inventory[inventorySlotIndex] then
+        print("[EQUIP] Invalid inventory slot index or empty slot: " .. tostring(inventorySlotIndex))
+        return false
+    end
+
+    local itemToEquip = player.inventory[inventorySlotIndex]
+    local itemId = itemToEquip.itemId
+    local itemData = GameData.items[itemId]
+
+    if not itemData then
+        print("[EQUIP] No item data found for: " .. itemId)
+        return false
+    end
+
+    if itemData.type ~= "equipment" or not itemData.slot then
+        print("[EQUIP] Item is not equippable: " .. itemId)
+        uiMessage = GameData.getText(currentGameLanguage, "error_not_equippable", {item = GameData.getText(currentGameLanguage, itemData.name_key)}, "This item cannot be equipped.")
+        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+        return false
+    end
+
+    local targetSlot = itemData.slot
+    print("[EQUIP] Attempting to equip " .. itemId .. " to slot " .. targetSlot)
+
+    -- If slot is occupied, attempt to unequip existing item first
+    if player.equipment[targetSlot] then
+        print("[EQUIP] Slot " .. targetSlot .. " is occupied by " .. player.equipment[targetSlot] .. ". Attempting to unequip it.")
+        local unequippedSuccessfully = unequipItem(targetSlot)
+        if not unequippedSuccessfully then
+            print("[EQUIP] Failed to unequip item from slot " .. targetSlot .. ". Cannot equip new item.")
+            -- uiMessage is set by unequipItem on failure (e.g. inventory full)
+            return false
+        end
+    end
+
+    -- Apply new item's stats
+    if itemData.stats then
+        for statName, value in pairs(itemData.stats) do
+            if isInArray(EQUIPPABLE_STATS, statName) then
+                player[statName] = (player[statName] or 0) + value
+                print(string.format("[EQUIP] Applied stat %s: %s%s to player. New value: %s", statName, (value > 0 and "+" or ""), value, player[statName]))
+            end
+        end
+    end
+
+    player.equipment[targetSlot] = itemId       -- Store item ID in equipment slot
+    player.inventory[inventorySlotIndex] = nil -- Remove from inventory
+
+    recalculatePlayerStats() -- Adjust HP/MP if max values changed
+
+    local itemName = GameData.getText(currentGameLanguage, itemData.name_key, nil, itemId)
+    uiMessage = GameData.getText(currentGameLanguage, "item_equipped", {item = itemName, slot = targetSlot}, "%{item} equipped to %{slot}.")
+    uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+    print("[EQUIP] Successfully equipped " .. itemId .. " to " .. targetSlot)
+    return true
+end
+
+function unequipItem(equipmentSlotKey)
+    if not equipmentSlotKey or not player.equipment[equipmentSlotKey] then
+        print("[UNEQUIP] Invalid equipment slot key or no item in slot: " .. tostring(equipmentSlotKey))
+        return false
+    end
+
+    local itemIdToUnequip = player.equipment[equipmentSlotKey]
+    local itemData = GameData.items[itemIdToUnequip]
+
+    if not itemData then
+        print("[UNEQUIP] No item data for item to unequip: " .. itemIdToUnequip)
+        player.equipment[equipmentSlotKey] = nil
+        return true
+    end
+    print("[UNEQUIP] Attempting to unequip " .. itemIdToUnequip .. " from slot " .. equipmentSlotKey)
+
+    if not addItemToInventory(itemIdToUnequip, 1) then
+        print("[UNEQUIP] Inventory full. Cannot unequip " .. itemIdToUnequip)
+        uiMessage = GameData.getText(currentGameLanguage, "error_inventory_full_unequip", {item = GameData.getText(currentGameLanguage, itemData.name_key)}, "Inventory full. Cannot unequip %{item}.")
+        uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+        return false
+    end
+
+    if itemData.stats then
+        for statName, value in pairs(itemData.stats) do
+            if isInArray(EQUIPPABLE_STATS, statName) then
+                player[statName] = (player[statName] or 0) - value
+                print(string.format("[UNEQUIP] Reverted stat %s: %s%s from player. New value: %s", statName, (value > 0 and "-" or "+"), value, player[statName]))
+            end
+        end
+    end
+
+    player.equipment[equipmentSlotKey] = nil
+
+    recalculatePlayerStats()
+
+    local itemName = GameData.getText(currentGameLanguage, itemData.name_key, nil, itemIdToUnequip)
+    uiMessage = GameData.getText(currentGameLanguage, "item_unequipped", {item = itemName, slot = equipmentSlotKey}, "%{item} unequipped from %{slot}.")
+    uiMessageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
+    print("[UNEQUIP] Successfully unequipped " .. itemIdToUnequip .. " from " .. equipmentSlotKey)
+    return true
+end
+
+function exitGrindingMode()
+    if currentState.isGrinding then
+        print("[GRINDING] Exiting grinding mode.")
+        currentState.isGrinding = false
+        currentState.currentGrindingLevelId = nil
+
+        saveGame() -- Save progress as per plan
+
+        -- Stop battle music and potentially start menu music before transition
+        if resources.sounds.battleBgm and resources.sounds.battleBgm:isPlaying() then
+            resources.sounds.battleBgm:stop()
+        end
+        if not audioState.isMutedBGM and resources.sounds.menuBgm then
+             resources.sounds.menuBgm:setLooping(true)
+             resources.sounds.menuBgm:play()
+        end
+
+        transitionGameState(gameState, "levelSelect") -- Or "menu" if preferred
+    end
+end
 
 function performPlayerAttack()
     if skillSystem.attack.cooldown > 0 then
@@ -3467,7 +4509,20 @@ function updateCooldowns()
   end
 end
 function drawBattleScene()
-  local bgImage = resources.images[battleBackgrounds[menuState.levelSelect.currentLevel]]
+  local bgKey
+  if currentState.isGrinding and currentState.currentGrindingLevelId then
+    local grindingLevelData = GameData.grindingLevels[currentState.currentGrindingLevelId]
+    if grindingLevelData and grindingLevelData.battleBg then
+      bgKey = grindingLevelData.battleBg -- Use battleBg from grinding level definition
+    else
+      print("[ERROR] Grinding level data or battleBg missing for: " .. currentState.currentGrindingLevelId)
+      bgKey = "battleBgForest" -- Fallback
+    end
+  else
+    bgKey = battleBackgrounds[menuState.levelSelect.currentLevel] -- Regular level background
+  end
+
+  local bgImage = resources.images[bgKey]
   if bgImage then
       love.graphics.draw(bgImage, 0, 0, 0,
         love.graphics.getWidth()/bgImage:getWidth(),
@@ -3661,6 +4716,8 @@ function saveGame()
             critDamage = player.critDamage,
             inventory = player.inventory,
             inventoryCapacity = player.inventoryCapacity,
+            activeQuests = player.activeQuests,
+            completedQuests = player.completedQuests,
         },
         currentState = {
             currentLevel = currentState.currentLevel,
@@ -3697,6 +4754,82 @@ function saveGame()
         battleState.message = GameData.getText(currentGameLanguage, "game_saved_fail")
         battleState.messageTimer = GAME_CONSTANTS.TIMER.MESSAGE_DURATION
     end
+end
+
+function drawStatsScreen()
+    local windowWidth = love.graphics.getWidth()
+    local windowHeight = love.graphics.getHeight()
+    love.graphics.clear(0.15, 0.15, 0.1, 1) -- Dark green-ish background
+
+    local uiFont = resources.fonts.ui or love.graphics.newFont(18) -- Ensure a decent size
+    local titleFont = resources.fonts.battle or love.graphics.newFont(28)
+
+    statsScreenState.lineHeight = uiFont:getHeight() + 8 -- Add some padding
+    local currentY = statsScreenState.padding
+
+    -- Title
+    love.graphics.setFont(titleFont)
+    love.graphics.setColor(1, 1, 1)
+    local titleText = GameData.getText(currentGameLanguage, "stats_screen_title", nil, "Player Statistics")
+    love.graphics.printf(titleText, 0, currentY, windowWidth, "center")
+    currentY = currentY + titleFont:getHeight() + statsScreenState.padding * 2
+
+    -- Stats Display
+    love.graphics.setFont(uiFont)
+
+    local statsToDisplay = {
+        {label_key = "stat_label_level", value = player.level},
+        {label_key = "stat_label_exp", value_format = "%s / %s", value = player.exp, value2 = player.expToNextLevel},
+        {label_key = "stat_label_hp", value_format = "%s / %s", value = player.hp, value2 = player.maxHp},
+        {label_key = "stat_label_mp", value_format = "%s / %s", value = player.mp, value2 = player.maxMp},
+        {label_key = "stat_label_attack", value = player.attack},
+        {label_key = "stat_label_defense", value = player.defense},
+        {label_key = "stat_label_crit_rate", value_format = "%s%%", value = player.critRate},
+        {label_key = "stat_label_crit_damage", value_format = "%sx", value = player.critDamage}
+    }
+
+    -- Determine max label width for alignment (simple version)
+    local maxLabelWidth = 0
+    for _, statItem in ipairs(statsToDisplay) do
+        local labelText = GameData.getText(currentGameLanguage, statItem.label_key, nil, statItem.label_key) .. ":"
+        if uiFont:getWidth(labelText) > maxLabelWidth then
+            maxLabelWidth = uiFont:getWidth(labelText)
+        end
+    end
+    statsScreenState.labelColumnWidth = maxLabelWidth + statsScreenState.padding
+    statsScreenState.valueColumnX = statsScreenState.padding + statsScreenState.labelColumnWidth
+
+    -- Draw each statistic
+    for _, statItem in ipairs(statsToDisplay) do
+        love.graphics.setColor(0.8, 0.8, 1) -- Label color
+        local labelText = GameData.getText(currentGameLanguage, statItem.label_key, nil, statItem.label_key) .. ":"
+        love.graphics.print(labelText, statsScreenState.padding + (statsScreenState.labelColumnWidth - uiFont:getWidth(labelText) - statsScreenState.padding), currentY) -- Right align labels
+
+        love.graphics.setColor(1, 1, 1) -- Value color
+        local valueString
+        if statItem.value_format then
+            if statItem.value2 then
+                valueString = string.format(statItem.value_format, tostring(statItem.value), tostring(statItem.value2))
+            else
+                valueString = string.format(statItem.value_format, tostring(statItem.value))
+            end
+        else
+            valueString = tostring(statItem.value)
+        end
+        love.graphics.print(valueString, statsScreenState.valueColumnX, currentY)
+
+        currentY = currentY + statsScreenState.lineHeight
+    end
+
+    -- Instructions
+    love.graphics.setColor(0.8, 0.8, 0.8)
+    local instructions = GameData.getText(currentGameLanguage, "stats_screen_instructions", nil, "Press ESC to go back")
+    love.graphics.printf(instructions, 0, windowHeight - statsScreenState.lineHeight - statsScreenState.padding, windowWidth, "center")
+end
+
+function handleStatsScreenInput(dt)
+    -- Placeholder: Will be implemented if complex input is needed later
+    -- For now, Esc is handled in love.keypressed
 end
 
 function loadGame()
@@ -3737,6 +4870,9 @@ function loadGame()
         player.defense = data.player.defense or player.defense
         player.critRate = data.player.critRate or player.critRate
         player.critDamage = data.player.critDamage or player.critDamage
+
+        player.activeQuests = data.player.activeQuests or {}
+        player.completedQuests = data.player.completedQuests or {}
 
         player.inventoryCapacity = data.player.inventoryCapacity or 20
         local loadedInventory = data.player.inventory or {}
