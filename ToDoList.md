@@ -1,45 +1,6 @@
 # A Hero's Redemption 2D TO DO LIST Before V1.0
 
-II. Story Mode & Content
-(Note: Basic level-based dialogue progression and endings are implemented. This section focuses on further enhancements.)
-Advanced Story Mode Features
-Goal: Implement the actual story, dialogues, events, and progression.
-Key Data Structures:
-GameData.story.levelIntros and GameData.story.ending are good.
-Extend GameData.story for mid-level story beats or events if needed.
-Core Logic:
-Dialogue System Integration:
-Your existing GameData.startLevelDialogue, nextDialogue, getCurrentDialogue is a strong base.
-Dialogue choices (currentDialogue.choices in GameData) can:
-Set flags: GameData.storyFlags.met_character_X = true.
-Start quests: QuestSystem.startQuest("quest_id").
-Change relationships: GameData.changeRelationship().
-Levels/Scenes:
-If story requires non-battle exploration:
-New gameState = "exploration".
-Level data would include layout, NPCs, triggers.
-Story-Specific NPCs, Items, Triggers:
-Define NPCs in GameData.characters or a new GameData.npcs.
-Story items use the new Item System.
-Triggers use the Room Event Trigger system (see IV.3).
-Cutscenes:
-Text-based: Use the dialogue system with sequences of dialogue lines.
-In-engine: A function that controls character movement (animations table), camera, and dialogue calls over time. Use TimerSystem for sequencing.
-Integration Points: Quest System, NPC System, Room Event Triggers.
-Save/Load Impact: currentState (level, dialogue index), GameData.storyFlags, quest progress.
-
-
 III. Gameplay Systems - Character & Interaction
-(Note: Basic EXP gain, leveling up, and stat increases are implemented. Player stats are displayed in battle and on a stats screen.)
-Advanced Character Progression & Skill Unlocking
-Goal: Refine and extend the existing leveling system.
-Key Data Structures:
-player table: Already has most necessary fields (Level, EXP, EXPToNextLevel, stats).
-GameData.skillUnlocks = { [level_number] = {"skill_key1", "skill_key2"}, ... }
-Core Logic:
-EXP Gain: grantExp() is good. Ensure it's called by monster kills and Quest System rewards.
-Level Up Event (checkLevelUp()):
-Stat increases: Already implemented.
 Skill Unlocking:
 Inside checkLevelUp(), after incrementing player.level, check GameData.skillUnlocks[player.level].
 For each skill key found, make it available (e.g., add to a player.unlockedSkills table, or simply allow its use if skillInfo is the master list).
@@ -127,8 +88,8 @@ UI Components: Visuals for traps, chests. Loot window.
 Integration Points: Player movement/collision, Loot System, Dialogue System.
 Save/Load Impact: trigger.isOpen, trigger.active for each trigger instance.
 
-(Note: A Quest Log UI for viewing active/completed quests is implemented. This section focuses on NPC interaction for obtaining and turning in quests, and trading.)
 NPC Interaction, Quest Giving & Trading System
+(Note: A Quest Log UI for viewing active/completed quests is implemented. This section focuses on NPC interaction for obtaining and turning in quests, and trading.)
 Goal: Allow NPCs to give quests and trade items with the player.
 Key Data Structures:
 GameData.npcs = { [npcId] = { name_key, portrait_key, dialogue_greeting_key, quests_available={"q1","q2"}, trades_items_table_id, ...} }
@@ -187,6 +148,7 @@ Draw icons for player, nearby entities.
 UI Components: Full map screen, Mini-map HUD element.
 Save/Load Impact: player.mapFog.
 
+pdf check
 ____________________
 Turn-based RPG using Love2D Framework. Personal demo for better understand the challenges in a larger Unity 3D group project later this year
 
