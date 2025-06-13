@@ -4,7 +4,7 @@ A Hero's Redemption 2D is a simple RPG battle game built using the LÖVE 12 Beta
 It serves as a personal proof-of-concept and learning exercise to understand better the mechanics, systems, and potential complexities involved in game development, Specifically, in preparation for my **Year 2 G6078: Game Design and Development** Assignments 2 and 3, which will be larger Unity 3D group projects taking place between January and May 2025. This 2D project aims to provide insights into code volume, game architecture, and overall development effort. Ultimately, it helps assess the feasibility of achieving our ambitious 3D game goals within a few months of part-time development.
 
 ## ScreenShot (V0.01)
-![ScreenShot1](https://github.com/dundd2/A-Heros-Redemption-2D/blob/main/assets/Screenshot/SC(1).gif)
+![ScreenShot1](https://github.com/dundd2/A-Heros-Redemption-2D/blob/main/Codebase/assets/Screenshot/SC(1).gif)
 
 ## Project Overview
 
